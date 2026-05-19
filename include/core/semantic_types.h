@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include "fixed.h"
 
 // ============================================================================
 // NUMERIC TYPE ALIASES - Trading Domain
@@ -86,12 +87,8 @@ using NanosecondTimestamp = int64_t;
 // PRICE ALIASES
 // ============================================================================
 
-/** Price type - using fixed-point arithmetic (Fixed<7>) 
- *  This is a domain-specific alias that should be imported from fixed.h
- *  Defined locally to avoid circular dependencies:
- *  using Price = Fixed<7>;
- */
+/** Semantic alias for price representation using fixed-point arithmetic */
+using Price = Fixed<7>;
 
-// Note: Price alias is defined in order.h where Fixed<7> is available
-// Import the Price alias from order.h when needed:
-// using Price = F;  // where F is typedef Fixed<7> F;
+/** Legacy alias for backward compatibility */
+using F = Fixed<7>;

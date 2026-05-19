@@ -7,6 +7,7 @@
 #include <vector>
 #include <shared_mutex>
 #include <memory>
+#include "constants.h"
 
 namespace orderbook {
 
@@ -42,7 +43,7 @@ private:
 
 public:
     StringInterner() {
-        m_strings.reserve(1024);
+        m_strings.reserve(kInitialStringInternerCapacity);
         m_strings.push_back({nullptr, 0, 0}); // INVALID_ID
     }
 
@@ -55,7 +56,12 @@ public:
 
         size_t hash = compute_hash(sv);
         
-        // Fast path: check if already exists (read lock)
+        // Extreme Fast path: thread-local cache to avoid ANY mutex contention
+        thread_local std::unordered_map<size_t, StringId> tl_cache;
+        auto cache_it = tl_cache.find(hash);
+        if (cache_it != tl_cache.end()) return cache_it->second;
+
+        // Fast path: check if already exists (shared read lock)
         {
             std::shared_lock lock(m_mutex);
             auto it = m_hashToIds.find(hash);
@@ -64,6 +70,7 @@ public:
                     const auto& str = m_strings[id];
                     if (str.length == sv.length() && 
                         std::memcmp(str.data.get(), sv.data(), sv.length()) == 0) {
+                        tl_cache[hash] = id;
                         return id;
                     }
                 }
@@ -95,6 +102,7 @@ public:
         m_strings.push_back({std::move(buffer), sv.length(), hash}); // Renamed to m_snake_case
         m_hashToIds[hash].push_back(new_id); // Renamed to m_snake_case
         
+        tl_cache[hash] = new_id;
         return new_id;
     }
 

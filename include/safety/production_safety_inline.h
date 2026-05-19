@@ -11,6 +11,8 @@
 #include <chrono>
 #include <stdexcept>
 #include <thread>
+#include <array>
+#include "core/constants.h"
 
 class ProductionSafety {
 private:
@@ -19,11 +21,6 @@ private:
     static inline std::atomic<std::chrono::steady_clock::time_point> s_lastFailureTime{
         std::chrono::steady_clock::now()
     };
-    
-    static constexpr int kMaxRecursionDepth = 50;
-    static constexpr std::chrono::seconds kResetInterval{1};
-    static constexpr std::chrono::seconds kCooldownPeriod{30};
-    static constexpr int kFailureThreshold = 10;
 
 public:
     // ====================================================================
@@ -31,6 +28,7 @@ public:
     // ====================================================================
     struct ThreadLocalState {
         int m_recursionDepth = 0;
+        uint32_t m_sampleCounter = 0;
         std::chrono::steady_clock::time_point m_lastResetTime = std::chrono::steady_clock::now();
     };
     
@@ -57,12 +55,14 @@ public:
         if (isTestMode()) return true;
         
         auto& state = threadState();
-        const auto now = std::chrono::steady_clock::now();
         
-        // Periodic reset to prevent permanent lockout
-        if (now - state.m_lastResetTime > kResetInterval) {
-            state.m_recursionDepth = 0;
-            state.m_lastResetTime = now;
+        // Sample clock only once every 512 calls to reduce syscall overhead
+        if ((++state.m_sampleCounter & 511) == 0) {
+            const auto now = std::chrono::steady_clock::now();
+            if (now - state.m_lastResetTime > kResetInterval) {
+                state.m_recursionDepth = 0;
+                state.m_lastResetTime = now;
+            }
         }
         
         if (++state.m_recursionDepth > kMaxRecursionDepth) {

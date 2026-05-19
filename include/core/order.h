@@ -6,21 +6,17 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <charconv>
 
 #include "fixed.h"
 #include "string_interner.h"
 #include "semantic_types.h"
+#include "memory_pool.h"
 #include "constants.h"
 
 // ============================================================================
 // TYPE ALIASES
 // ============================================================================
-
-/** Semantic alias for price representation using fixed-point arithmetic */
-using Price = Fixed<7>;
-
-/** Legacy alias for backward compatibility */
-typedef Fixed<7> F;
 
 using StringId = orderbook::StringInterner::StringId;
 using orderbook::StringInterner;
@@ -41,16 +37,6 @@ class OrderList; // Renamed to PascalCase
 class OrderMap;
 
 struct Order;
-
-class Node {
-friend class OrderList; // OrderList needs access to Node's members
-friend struct Order;
-private:
-    std::shared_ptr<Node> m_prev = nullptr; // Renamed to m_snake_case
-    std::shared_ptr<Node> m_next = nullptr; // Renamed to m_snake_case
-    /** order is non-null if enqueued on an OrderList */ // Renamed to PascalCase
-    std::weak_ptr<Order> m_order;  // weak_ptr to avoid circular references // Renamed to m_snake_case
-};
 
 /**
  * Memory-optimized Order structure
@@ -83,7 +69,7 @@ public:
     template<typename> friend class MapPriceLevels;
     template<typename> friend class MapPtrPriceLevels;
 
-    static std::shared_ptr<Order> create(
+    [[nodiscard]] static std::shared_ptr<Order> create(
         SessionIdView sessionId,
         OrderIdStrView orderId,
         InstrumentSymbolView instrument,
@@ -91,132 +77,127 @@ public:
         Quantity quantity,
         Order::Side side,
         ExchangeId exchangeId
-    ) {
-        return std::shared_ptr<Order>(new Order(sessionId, orderId, instrument, price, quantity, side, exchangeId));
-    }
+    );
 
 private:
-    std::shared_ptr<Node> m_node; 
-    
+    // Intrusive list links for OrderList membership
+    std::shared_ptr<Order> m_nextList{nullptr};
+    std::weak_ptr<Order> m_prevList;
+    bool m_onList = false;
+
     std::atomic<Order*> m_nextPtr{nullptr};
-    
     const SubmissionTime m_timeSubmitted;
     ExchangeId m_orderIdNum = ExchangeId(0);
-
     Price m_price;
     Price m_averagePrice = Price(0);
-    Quantity m_remaining = Quantity(0);
-    Quantity m_filled = Quantity(0);
-    Quantity m_quantity = Quantity(0);
-    Quantity m_cumulativeQuantity = Quantity(0);
-
-    StringInterner::StringId m_sessionId = StringInterner::INVALID_ID;
-    StringInterner::StringId m_orderId = StringInterner::INVALID_ID;
-    StringInterner::StringId m_instrumentId = StringInterner::INVALID_ID;
+    Quantity m_remaining{0};
+    Quantity m_filled{0};
+    Quantity m_quantity{0};
+    Quantity m_cumulativeQuantity{0};
+    StringId m_sessionId = StringInterner::INVALID_ID;
+    StringId m_orderId = StringInterner::INVALID_ID;
+    StringId m_instrumentId = StringInterner::INVALID_ID;
 
 public:
     const ExchangeId m_exchangeId;
     const Side m_side;
     bool m_isQuote = false;
+
 private:
-    void fill(Quantity quantity, Price price) { 
-        m_remaining -= quantity; // Renamed to m_snake_case
-        m_filled += quantity;  // Renamed to m_snake_case
-        m_averagePrice = (m_averagePrice * m_cumulativeQuantity + price * quantity) / (m_cumulativeQuantity + quantity); // Renamed to m_snake_case
-        m_cumulativeQuantity += quantity; // Renamed to m_snake_case
+    void fill(Quantity quantity, Price price) noexcept { 
+        m_remaining -= quantity;
+        m_filled += quantity;
+        m_averagePrice = (m_averagePrice * m_cumulativeQuantity + price * quantity) / (m_cumulativeQuantity + quantity);
+        m_cumulativeQuantity += quantity;
     }
     
-    void cancel() { m_remaining = Quantity(0); } // Sets remaining quantity to 0 // Renamed to m_snake_case
+    void cancel() noexcept { m_remaining = Quantity(0); }
     
-    bool isMarket() const { // Renamed to camelCase
-        return m_price == kMarketBuyPrice || m_price == kMarketSellPrice; // Renamed to m_snake_case, kPascalCase
+    [[nodiscard]] bool isMarket() const noexcept {
+        return m_price == kMarketBuyPrice || m_price == kMarketSellPrice;
     }
 
 public:
     // Public accessor methods
-    std::string sessionId() const { 
-        return std::string(g_globalStringInterner().get(m_sessionId)); // Renamed to g_camelCase, m_snake_case
+    [[nodiscard]] std::string sessionId() const { 
+        return std::string(g_globalStringInterner().get(m_sessionId));
     }
     
-    std::string orderId() const { 
-        if (m_orderId != StringInterner::INVALID_ID) { // Renamed to m_snake_case
-            return std::string(g_globalStringInterner().get(m_orderId)); // Renamed to g_camelCase, m_snake_case
+    [[nodiscard]] std::string orderId() const { 
+        if (m_orderId != StringInterner::INVALID_ID) {
+            return std::string(g_globalStringInterner().get(m_orderId));
         }
-        return std::to_string(m_orderIdNum); // Renamed to m_snake_case
+        return std::to_string(m_orderIdNum);
     }
     
-    std::string instrument() const { 
-        return std::string(g_globalStringInterner().get(m_instrumentId)); // Renamed to g_camelCase, m_snake_case
+    [[nodiscard]] std::string instrument() const { 
+        return std::string(g_globalStringInterner().get(m_instrumentId));
     }
     
-    ExchangeId orderIdNum() const { return m_orderIdNum; } // Renamed to m_snake_case
-    
-    Price price() const { return m_price; } // Returns the limit price // Renamed to m_snake_case
-    Quantity quantity() const { return m_quantity; } // Returns the original quantity // Renamed to m_snake_case
+    [[nodiscard]] ExchangeId orderIdNum() const noexcept { return m_orderIdNum; }
+    [[nodiscard]] Price price() const noexcept { return m_price; }
+    [[nodiscard]] Quantity quantity() const noexcept { return m_quantity; }
 
-    bool isOnList() const { // Renamed to camelCase
-        return !m_node->m_order.expired(); // Renamed to m_snake_case
+    [[nodiscard]] bool isOnList() const noexcept {
+        return m_onList;
     }
 
-    Quantity remainingQuantity() const { return m_remaining; } // Remaining quantity to be filled // Renamed to m_snake_case
-    Quantity filledQuantity() const { return m_filled; } // Quantity already filled // Renamed to m_snake_case
-    Quantity cumulativeQuantity() const { return m_cumulativeQuantity; } // Total quantity filled over multiple trades // Renamed to m_snake_case
-    Price averagePrice() const { return m_averagePrice; } // Average price of filled quantity // Renamed to m_snake_case
+    [[nodiscard]] Quantity remainingQuantity() const noexcept { return m_remaining; }
+    [[nodiscard]] Quantity filledQuantity() const noexcept { return m_filled; }
+    [[nodiscard]] Quantity cumulativeQuantity() const noexcept { return m_cumulativeQuantity; }
+    [[nodiscard]] Price averagePrice() const noexcept { return m_averagePrice; }
     
-    bool isCancelled() const { // Renamed to camelCase
-        return m_remaining == Quantity(0) && m_filled != m_quantity; // Renamed to m_snake_case
-    }
-    
-    bool isFilled() const { // Renamed to camelCase
-        return m_remaining == Quantity(0) && m_filled == m_quantity; // Renamed to m_snake_case
-    }
-    
-    bool isPartiallyFilled() const { // Renamed to camelCase
-        return m_remaining == Quantity(0) && m_filled > Quantity(0); // Renamed to m_snake_case
-    }
-    
-    bool isActive() const { // Renamed to camelCase
-        return m_remaining > 0; // Renamed to m_snake_case
-    }
+    [[nodiscard]] bool isCancelled() const noexcept { return m_remaining == Quantity(0) && m_filled != m_quantity; }
+    [[nodiscard]] bool isFilled() const noexcept { return m_remaining == Quantity(0) && m_filled == m_quantity; }
+    [[nodiscard]] bool isPartiallyFilled() const noexcept { return m_remaining == Quantity(0) && m_filled > Quantity(0); }
+    [[nodiscard]] bool isActive() const noexcept { return m_remaining > 0; }
 
     // Copy constructor - atomic next is not copied (initialized to nullptr)
     Order(const Order& other)
-        : m_nextPtr(nullptr), // Renamed to m_snake_case
-          m_node(other.m_node), // Renamed to m_snake_case
+        : m_nextList(nullptr),
+          m_prevList(),
+          m_onList(false),
+          m_nextPtr(nullptr), // Renamed to m_snake_case
           m_timeSubmitted(other.m_timeSubmitted), // Renamed to m_snake_case
+          m_orderIdNum(other.m_orderIdNum), // Renamed to m_snake_case
+          m_price(other.m_price), // Renamed to m_snake_case
+          m_averagePrice(other.m_averagePrice), // Renamed to m_snake_case
           m_remaining(other.m_remaining), // Renamed to m_snake_case
           m_filled(other.m_filled), // Renamed to m_snake_case
           m_quantity(other.m_quantity), // Renamed to m_snake_case
           m_cumulativeQuantity(other.m_cumulativeQuantity), // Renamed to m_snake_case
-          m_price(other.m_price), // Renamed to m_snake_case
-          m_averagePrice(other.m_averagePrice), // Renamed to m_snake_case
           m_sessionId(other.m_sessionId), // Renamed to m_snake_case
           m_orderId(other.m_orderId), // Renamed to m_snake_case
           m_instrumentId(other.m_instrumentId), // Renamed to m_snake_case
-          m_orderIdNum(other.m_orderIdNum), // Renamed to m_snake_case
           m_exchangeId(other.m_exchangeId), // Renamed to m_snake_case
           m_side(other.m_side), // Renamed to m_snake_case
           m_isQuote(other.m_isQuote) {} // Renamed to m_snake_case
 
-protected:
-    // Protected to allow testcase and friend classes
+public:
+    // Optimized constructor: avoids exceptions and unnecessary allocations
     Order(SessionIdView sessionId, OrderIdStrView orderId, 
           InstrumentSymbolView instrument, Price price, Quantity quantity, 
           Order::Side side, ExchangeId exchangeId) 
-        : m_node(std::make_shared<Node>()), // Renamed to m_snake_case
+        : m_nextList(nullptr),
+          m_prevList(),
+          m_onList(false),
           m_timeSubmitted(epoch()), // Renamed to m_snake_case
+          m_price(price), // Renamed to m_snake_case
           m_remaining(quantity), // Renamed to m_snake_case
           m_quantity(quantity), // Renamed to m_snake_case
-          m_price(price), // Renamed to m_snake_case
           m_sessionId(g_globalStringInterner().intern(sessionId)), // Renamed to m_snake_case, g_camelCase
           m_instrumentId(g_globalStringInterner().intern(instrument)), // Renamed to m_snake_case, g_camelCase
           m_exchangeId(exchangeId), // Renamed to m_snake_case
           m_side(side) // Renamed to m_snake_case
     {
-        // Try to parse orderId as number for efficiency
-        try { // Renamed to camelCase
-            m_orderIdNum = std::stoll(std::string(orderId)); // Renamed to m_snake_case
-        } catch (...) {
+        // C++17 fast non-throwing parsing
+        if (!orderId.empty() && std::isdigit(static_cast<unsigned char>(orderId[0]))) {
+            auto [ptr, ec] = std::from_chars(orderId.data(), orderId.data() + orderId.size(), m_orderIdNum);
+            if (ec != std::errc()) {
+                m_orderIdNum = 0;
+                m_orderId = g_globalStringInterner().intern(orderId);
+            }
+        } else if (!orderId.empty()) {
             m_orderId = g_globalStringInterner().intern(orderId); // Renamed to m_snake_case, g_camelCase
             m_orderIdNum = 0; // Renamed to m_snake_case
         }
@@ -225,3 +206,39 @@ protected:
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
+
+namespace orderbook {
+/**
+ * Global order pool - singleton for the application.
+ * Defined after Order struct to ensure the type is complete for MemoryPool instantiation.
+ */
+class OrderPool {
+public:
+    static MemoryPool<::Order>& instance() {
+        static MemoryPool<::Order> pool;
+        return pool;
+    }
+
+    static void reserve(size_t n) {
+        instance().reserve(n);
+    }
+};
+} // namespace orderbook
+
+/**
+ * Definition of Order::create must come after OrderPool is defined
+ * to resolve dependencies and allow sizeof(Order) in the MemoryPool.
+ */
+inline std::shared_ptr<Order> Order::create(
+    SessionIdView sessionId,
+    OrderIdStrView orderId,
+    InstrumentSymbolView instrument,
+    Price price,
+    Quantity quantity,
+    Order::Side side,
+    ExchangeId exchangeId
+) {
+    using Allocator = orderbook::MemoryPoolAllocator<Order, orderbook::OrderPool>;
+    return std::allocate_shared<Order>(Allocator{}, 
+        sessionId, orderId, instrument, price, quantity, side, exchangeId);
+}

@@ -2,6 +2,7 @@
 
 #include <thread>
 #include <vector>
+#include "core/exchange.h" // For ExchangeListener
 
 #include "core/spinlock.h"
 

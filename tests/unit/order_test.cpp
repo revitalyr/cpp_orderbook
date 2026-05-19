@@ -4,9 +4,8 @@
 #include "core/test.h"
 
 TEST_CASE("Order basic creation", "[order]") {
-    auto order1 = TestOrder("myorder", 1, 100, 10, Order::Side::BUY); // Renamed to camelCase
-    REQUIRE(order1.orderId() == "myorder"); // Renamed to camelCase
-
-    auto order2 = TestOrder("myorder2", 1, 100, 10, Order::Side::BUY); // Renamed to camelCase
-    REQUIRE(order2.orderId() == "myorder2"); // Renamed to camelCase
+    auto order1 = TestOrder::create("myorder", 1, 100, 10, Order::Side::BUY, 1);
+    REQUIRE(order1->orderId() == "myorder");
+    auto order2 = TestOrder::create("myorder2", 1, 100, 10, Order::Side::BUY, 2);
+    REQUIRE(order2->orderId() == "myorder2");
 }

@@ -20,7 +20,7 @@ std::optional<Order> Exchange::getOrder(ExchangeId exchangeId) const {
 }
 
 std::optional<Book> Exchange::getBook(std::string_view instrument) const {
-    auto orderBook = m_books.getOrderBook(std::string(instrument));
+    auto orderBook = m_books.getOrderBook(instrument);
     if (!orderBook) return std::nullopt;
     
     auto bookGuard = orderBook->lock();
@@ -30,7 +30,7 @@ std::optional<Book> Exchange::getBook(std::string_view instrument) const {
 CancelResult Exchange::cancelOrder(ExchangeId exchangeId, SessionIdView sessionId) {
     auto order = m_allOrders.get(exchangeId);
     if (!order) {
-        throw std::invalid_argument(std::string(EngineConstants::kOrderNotFound));
+        throw std::invalid_argument(std::string(::EngineConstants::kOrderNotFound));
     }
     
     if (order->sessionId() != sessionId) {
@@ -56,7 +56,7 @@ OrderResult Exchange::insertOrderInternal(
     OrderIdStrView orderId
 ) {
     try {
-        auto orderBook = m_books.getOrCreate(std::string(instrument), *this);
+        auto orderBook = m_books.getOrCreate(instrument, *this);
         if (!orderBook) {
             return std::nullopt;
         }
@@ -79,12 +79,12 @@ OrderResult Exchange::insertOrderInternal(
         // C++20: Use new insertOrder with explicit result checking
         auto result = orderBook->insertOrder(order);
         
-        // Mandatory result checking with configurable error handling
-        if (!result.hasValue()) {
+        // C++23 style result checking
+        if (!result.has_value()) {
             const auto& error = result.error();
             
             // Log error details
-            std::cerr << EngineConstants::kExchangeErrorPrefix << EngineConstants::kOrderInsertionFailed << error.toString() << "\n";
+            std::cerr << ::EngineConstants::kExchangeErrorPrefix << ::EngineConstants::kOrderInsertionFailed << error.toString() << "\n";
             
             // Handle specific error types with configurable strategies
             switch (error.code) {
@@ -113,7 +113,7 @@ OrderResult Exchange::insertOrderInternal(
         
         return id;
     } catch (const std::exception& e) {
-        std::cerr << EngineConstants::kExchangeErrorPrefix << EngineConstants::kExceptionInInsertOrder << e.what() << "\n";
+        std::cerr << ::EngineConstants::kExchangeErrorPrefix << ::EngineConstants::kExceptionInInsertOrder << e.what() << "\n";
         return std::nullopt;
     }
 }
@@ -147,32 +147,21 @@ void Exchange::quote(
     Quantity askQuantity,
     QuoteIdView quoteId
 ) {
-    auto orderBook = m_books.getOrCreate(std::string(instrument), *this);
-    auto bookGuard = orderBook->lock();
+    auto orderBook = m_books.getOrCreate(instrument, *this);
+    auto lock = orderBook->lock();
     
-    auto orders = orderBook->getQuotes(
-        std::string(sessionId),
-        std::string(quoteId),
+    auto orders = orderBook->getQuotes(sessionId, quoteId,
         [&]() -> QuoteOrders {
             QuoteOrders result;
-
             if (bidQuantity > Quantity(0)) {
-                result.m_bid = Order::create(
-                    std::string(sessionId),
-                    std::string(quoteId),
-                    orderBook->m_instrument,
-                    bidPrice,
-                    bidQuantity,
-                    Order::Side::BUY,
-                    nextId()
-                );
+                result.m_bid = Order::create(sessionId, quoteId, orderBook->m_instrument, bidPrice, bidQuantity, Order::Side::BUY, nextId());
                 m_allOrders.add(result.m_bid);
             }
             
             if (askQuantity > Quantity(0)) {
                 result.m_ask = Order::create(
-                    std::string(sessionId),
-                    std::string(quoteId),
+                    sessionId,
+                    quoteId,
                     orderBook->m_instrument,
                     askPrice,
                     askQuantity,

@@ -7,8 +7,8 @@
 class OrderList {
 friend class OrderBook;
 private: // Internal state
-    std::shared_ptr<Node> m_head = nullptr; // Head of the linked list of orders
-    std::shared_ptr<Node> m_tail = nullptr; // Tail of the linked list of orders
+    std::shared_ptr<Order> m_head = nullptr; // Head of the linked list of orders
+    std::shared_ptr<Order> m_tail = nullptr; // Tail of the linked list of orders
     F m_price;
 public:
     OrderList(F price) : m_price(price) {}
@@ -23,12 +23,12 @@ public:
         using reference         = std::shared_ptr<Order>&;
         
         value_type operator*() const { 
-            return current->m_order.lock(); 
+            return current; 
         }
         
         // Prefix increment
         Iterator& operator++() { 
-            current = current->m_next; 
+            current = current->m_nextList; 
             return *this;  
         }  
         
@@ -41,56 +41,56 @@ public:
         }
         
     private:
-        Iterator(std::shared_ptr<Node> node) : current(node) {}
-        std::shared_ptr<Node> current;
+        Iterator(std::shared_ptr<Order> node) : current(node) {}
+        std::shared_ptr<Order> current;
     };
     
     void pushBack(std::shared_ptr<Order> order) {
         if (!order) return;
         
-        auto node = order->m_node;
-        node->m_order = order;
+        order->m_onList = true;
         
         if (m_head == nullptr) {
-            m_head = node;
-            m_tail = node;
+            m_head = order;
+            m_tail = order;
         } else {
-            node->m_prev = m_tail;
-            m_tail->m_next = node;
-            m_tail = node;
+            order->m_prevList = m_tail;
+            m_tail->m_nextList = order;
+            m_tail = order;
         }
     }
     
     void remove(std::shared_ptr<Order> order) {
         if (!order) return;
         
-        auto node = order->m_node;
-        if (node->m_order.expired()) {
+        if (!order->m_onList) {
             throw std::runtime_error("node is null on removal");
         }
         
-        node->m_order.reset();
+        order->m_onList = false;
         
-        if (m_head == node) {
-            m_head = node->m_next;
-        } 
-        if (m_tail == node) {
-            m_tail = node->m_prev;
+        auto prev = order->m_prevList.lock();
+        auto next = order->m_nextList;
+
+        if (prev) {
+            prev->m_nextList = next;
+        } else if (m_head == order) {
+            m_head = next;
         }
-        if (node->m_prev) {
-            node->m_prev->m_next = node->m_next;
-        }
-        if (node->m_next) {
-            node->m_next->m_prev = node->m_prev;
+
+        if (next) {
+            next->m_prevList = prev;
+        } else if (m_tail == order) {
+            m_tail = prev;
         }
         
-        // Clear node's links
-        node->m_prev = nullptr;
-        node->m_next = nullptr;
+        // Clear links
+        order->m_nextList = nullptr;
+        order->m_prevList.reset();
     }
     
     std::shared_ptr<Order> front() const {
-        return (m_head == nullptr) ? nullptr : m_head->m_order.lock();
+        return m_head;
     }
     
     Iterator begin() const { 

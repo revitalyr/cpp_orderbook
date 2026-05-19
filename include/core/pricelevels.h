@@ -238,11 +238,11 @@ public: // Public interface
 };
 
 
-typedef PointerPriceLevels<std::deque<std::shared_ptr<OrderList>>> DequeuePtrPriceLevels;
-typedef PointerPriceLevels<std::vector<std::shared_ptr<OrderList>>> VectorPointerPriceLevels;
-typedef StructPriceLevels<std::vector<OrderList>> VectorPriceLevels;
-typedef MapPriceLevels<std::map<Price,OrderList,fixed_compare>> StdMapPriceLevels;
-typedef MapPtrPriceLevels<std::map<Price,std::shared_ptr<OrderList>,fixed_compare>> StdMapPointerPriceLevels;
+using DequeuePtrPriceLevels = PointerPriceLevels<std::deque<std::shared_ptr<OrderList>>>;
+using VectorPointerPriceLevels = PointerPriceLevels<std::vector<std::shared_ptr<OrderList>>>;
+using VectorPriceLevels = StructPriceLevels<std::vector<OrderList>>;
+using StdMapPriceLevels = MapPriceLevels<std::map<Price, OrderList, fixed_compare>>;
+using StdMapPointerPriceLevels = MapPtrPriceLevels<std::map<Price, std::shared_ptr<OrderList>, fixed_compare>>;
 
 // define the PriceLevels implementation to use
-typedef VectorPriceLevels PriceLevels;
+using PriceLevels = VectorPriceLevels;

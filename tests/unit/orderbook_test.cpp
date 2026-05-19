@@ -3,40 +3,45 @@
 #include "core/order.h"
 #include "core/orderbook.h"
 #include "core/test.h"
+#include "core/exchange.h" // For ExchangeListener
 #include "core/engine_constants.h"
 
+struct TestOrderBookListener : OrderBookListener {
+    // Implement onOrder/onTrade if needed for specific tests
+};
+
 TEST_CASE("OrderBook cancel order", "[orderbook]") {
-    OrderBookListener testListener;
-    OrderBook orderBook(kDummyInstrument, testListener);
+    TestOrderBookListener testListener;
+    OrderBook<TestOrderBookListener> orderBook(kDummyInstrument, testListener);
 
-    auto order1 = std::make_shared<TestOrder>(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY);
-    orderBook.insertOrder(order1); // Renamed to camelCase
-    orderBook.cancelOrder(order1); // Renamed to camelCase
+    auto order1 = TestOrder::create(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY);
+    orderBook.insertOrder(order1);
+    orderBook.cancelOrder(order1);
 
-    auto bookLevels = orderBook.getBook(); // Renamed to camelCase
-    REQUIRE(bookLevels.m_bids.size() == 0); // Renamed to m_snake_case
+    auto bookLevels = orderBook.getBook();
+    REQUIRE(bookLevels.m_bids.size() == 0);
 
-    auto order2 = std::make_shared<TestOrder>(1, 100, 10, Order::Side::BUY); // Renamed to camelCase
+    auto order2 = TestOrder::create(1, 100, 10, Order::Side::BUY);
     orderBook.insertOrder(order2);
-    auto order3 = std::make_shared<TestOrder>(ExchangeId(2), Price(90), Quantity(10), Order::Side::BUY);
+    auto order3 = TestOrder::create(ExchangeId(2), Price(90), Quantity(10), Order::Side::BUY);
     orderBook.insertOrder(order3);
-    auto order4 = std::make_shared<TestOrder>(ExchangeId(3), Price(80), Quantity(10), Order::Side::BUY);
+    auto order4 = TestOrder::create(ExchangeId(3), Price(80), Quantity(10), Order::Side::BUY);
     orderBook.insertOrder(order4);
 
-    orderBook.cancelOrder(order3); // Renamed to camelCase
+    orderBook.cancelOrder(order3);
 
-    auto bookSnapshot = orderBook.getBook(); // Renamed to camelCase
+    auto bookSnapshot = orderBook.getBook();
 
-    REQUIRE(bookSnapshot.m_bids.size() == 2); // Renamed to m_snake_case
-    REQUIRE(bookSnapshot.m_bids[0].m_price == 100); // Renamed to m_snake_case
-    REQUIRE(bookSnapshot.m_bids[1].m_price == Price(80)); // Renamed to m_snake_case
+    REQUIRE(bookSnapshot.m_bids.size() == 2);
+    REQUIRE(bookSnapshot.m_bids[0].m_price == 100);
+    REQUIRE(bookSnapshot.m_bids[1].m_price == Price(80));
 }
 
 TEST_CASE("OrderBook book levels", "[orderbook]") {
-    OrderBookListener testListener;
-    OrderBook orderBook(kDummyInstrument, testListener);
+    TestOrderBookListener testListener;
+    OrderBook<TestOrderBookListener> orderBook(kDummyInstrument, testListener);
 
-    auto order1 = std::make_shared<TestOrder>(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY);
+    auto order1 = TestOrder::create(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY);
     orderBook.insertOrder(order1);
 
     auto bookLevels = orderBook.getBook();
@@ -47,12 +52,12 @@ TEST_CASE("OrderBook book levels", "[orderbook]") {
 }
 
 TEST_CASE("OrderBook book levels sum", "[orderbook]") {
-    OrderBookListener testListener;
-    OrderBook orderBook(kDummyInstrument, testListener);
+    TestOrderBookListener testListener;
+    OrderBook<TestOrderBookListener> orderBook(kDummyInstrument, testListener);
 
-    auto order1 = std::make_shared<TestOrder>(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY);
+    auto order1 = TestOrder::create(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY);
     orderBook.insertOrder(order1);
-    auto order2 = std::make_shared<TestOrder>(ExchangeId(2), Price(100), Quantity(10), Order::Side::BUY);
+    auto order2 = TestOrder::create(ExchangeId(2), Price(100), Quantity(10), Order::Side::BUY);
     orderBook.insertOrder(order2);
 
     auto bookLevels = orderBook.getBook();
@@ -63,14 +68,14 @@ TEST_CASE("OrderBook book levels sum", "[orderbook]") {
 }
 
 TEST_CASE("OrderBook book levels multiple", "[orderbook]") {
-    OrderBookListener testListener;
-    OrderBook orderBook(kDummyInstrument, testListener);
+    TestOrderBookListener testListener;
+    OrderBook<TestOrderBookListener> orderBook(kDummyInstrument, testListener);
 
-    auto order1 = std::make_shared<TestOrder>(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY);
+    auto order1 = TestOrder::create(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY);
     orderBook.insertOrder(order1);
-    auto order2 = std::make_shared<TestOrder>(ExchangeId(2), Price(100), Quantity(10), Order::Side::BUY);
+    auto order2 = TestOrder::create(ExchangeId(2), Price(100), Quantity(10), Order::Side::BUY);
     orderBook.insertOrder(order2);
-    auto order3 = std::make_shared<TestOrder>(ExchangeId(3), Price(200), Quantity(30), Order::Side::BUY);
+    auto order3 = TestOrder::create(ExchangeId(3), Price(200), Quantity(30), Order::Side::BUY);
     orderBook.insertOrder(order3);
 
     auto bookLevels = orderBook.getBook();
@@ -83,13 +88,13 @@ TEST_CASE("OrderBook book levels multiple", "[orderbook]") {
 }
 
 TEST_CASE("OrderBook book levels order", "[orderbook]") {
-    OrderBookListener testListener;
-    OrderBook orderBook(kDummyInstrument, testListener);
+    TestOrderBookListener testListener;
+    OrderBook<TestOrderBookListener> orderBook(kDummyInstrument, testListener);
 
     // Store orders in a vector to keep them alive for the duration of the test
     std::vector<std::shared_ptr<Order>> orders;
     auto addOrder = [&](ExchangeId id, Price p, Quantity q, Order::Side s) {
-        auto o = std::make_shared<TestOrder>(id, p, q, s);
+        auto o = TestOrder::create(id, p, q, s);
         orders.push_back(o);
         orderBook.insertOrder(o);
     };

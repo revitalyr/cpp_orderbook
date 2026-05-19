@@ -42,10 +42,11 @@ using CancelResult = bool;
  * Manages a collection of OrderBooks keyed by instrument and maintains a global 
  * map of all active orders for efficient O(1) lookups and cancellations.
  */
-class Exchange : OrderBookListener {
+template <typename TListener>
+class Exchange : OrderBookListener { // Exchange still needs to implement OrderBookListener to be passed to OrderBook
 public:
     Exchange() : m_listener(g_dummyListener) {}
-    explicit Exchange(ExchangeListener& listener) : m_listener(listener) {}
+    explicit Exchange(TListener& listener) : m_listener(listener) {}
     
     /**
      * @brief Places a limit buy order.
@@ -149,7 +150,7 @@ public:
     }
     
 private:
-    BookMap m_books;
+    BookMap<Exchange<TListener>> m_books; // BookMap needs to be templated on the type of listener OrderBook expects
     OrderMap m_allOrders;
     SpinLock m_mu;
     
@@ -164,5 +165,5 @@ private:
         OrderIdStrView orderId
     );
     
-    ExchangeListener& m_listener; // Reference to the external listener
+    TListener& m_listener; // Reference to the external listener
 };

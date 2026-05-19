@@ -21,10 +21,12 @@ struct TestListener : OrderBookListener {
 void insertOrders(const bool withTrades,const int priceLevels) {
 
     TestListener listener;
-    OrderBook ob(kDummyInstrument,listener);
+    OrderBook<TestListener> ob(kDummyInstrument,listener);
 
     static const int kNumOrders = 5000000;
     static const int kTotalOrders = kNumOrders * 2;
+
+    orderbook::OrderPool::reserve(kTotalOrders);
 
     auto start = std::chrono::system_clock::now();
 
@@ -44,10 +46,12 @@ void insertOrders(const bool withTrades,const int priceLevels) {
 
 /** tests the time to remove an order at a random position in the OrderBook */
 void cancelOrders(const int priceLevels) {
-    OrderBookListener listener;
-    OrderBook ob(kDummyInstrument,listener);
+    TestListener listener; // Use TestListener for consistency
+    OrderBook<TestListener> ob(kDummyInstrument,listener);
 
     static const int kNumOrders = 1000000;
+
+    orderbook::OrderPool::reserve(kNumOrders);
 
     std::vector<std::string> output;
 

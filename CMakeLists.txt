@@ -22,6 +22,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
         /permissive-           # Strict standards conformance
         /Zc:__cplusplus        # Correct __cplusplus macro
         /utf-8                 # Source file encoding
+        /EHsc                  # unwind semantics
     )
     add_compile_definitions(
         _CRT_SECURE_NO_WARNINGS

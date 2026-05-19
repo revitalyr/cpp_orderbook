@@ -10,17 +10,24 @@
 #include <chrono>
 #include <cfloat>
 #include <cstddef>
+#include "semantic_types.h"
 #include "fixed.h" // For Price type
 
 // ============================================================================
 // BUFFER AND COLLECTION LIMITS
 // ============================================================================
 
+/** Number of shards for the OrderMap to reduce lock contention */
+constexpr size_t kOrderMapShards = 16;
+
+/** Default initial capacity for the OrderMap */
+constexpr size_t kDefaultOrderMapCapacity = 100000;
+
 /** Maximum number of instrument order books that can be stored */
 constexpr size_t kMaxInstruments = 1024;
 
 /** Cache-line aligned node size for memory pools */
-constexpr size_t kNodeSize = 64;
+constexpr size_t kNodeSize = 128; // Increased to accommodate std::shared_ptr control blocks
 
 // ============================================================================
 // RECURSION AND STACK PROTECTION
@@ -53,10 +60,10 @@ constexpr std::chrono::seconds kResetInterval{60};
 constexpr const char* kDefaultInstrument = "SYM1";
 
 /** Price value representing market buy (large finite value for fixed-point safety) */
-constexpr Price kMarketBuyPrice = Price(1e9);
+inline const Price kMarketBuyPrice = Price(1000000000);
 
 /** Price value representing market sell (large negative value for fixed-point safety) */
-constexpr Price kMarketSellPrice = Price(-1e9);
+inline const Price kMarketSellPrice = Price(-1000000000);
 
 // ============================================================================
 // STRING INTERNER CONSTANTS
@@ -64,3 +71,13 @@ constexpr Price kMarketSellPrice = Price(-1e9);
 
 /** Invalid string ID for the string interner - indicates no string is interned */
 constexpr uint32_t kInvalidStringId = 0;
+
+/** Initial capacity for the string interner string vector */
+constexpr size_t kInitialStringInternerCapacity = 1024;
+
+// ============================================================================
+// MEMORY POOL CONSTANTS
+// ============================================================================
+
+/** Number of objects per block in the memory pool */
+constexpr size_t kMemoryPoolBlockSize = 4096;

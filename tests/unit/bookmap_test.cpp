@@ -1,24 +1,25 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "core/bookmap.h"
+#include "core/exchange.h" // For ExchangeListener
 
-static OrderBookListener g_dummyListener; // Renamed to g_camelCase
+static ExchangeListener g_dummyListener;
 
 TEST_CASE("BookMap basic operations", "[bookmap]") {
-    BookMap bookMap; // Renamed to camelCase
+    BookMap<ExchangeListener> bookMap;
 
-    auto orderBook = bookMap.getOrderBook("dummy"); // Renamed to camelCase
-    REQUIRE(orderBook == nullptr); // Renamed to camelCase
+    auto orderBook = bookMap.getOrderBook("dummy");
+    REQUIRE(orderBook == nullptr);
 
-    orderBook = bookMap.getOrCreate("dummy", g_dummyListener); // Renamed to camelCase, g_camelCase
-    REQUIRE(orderBook != nullptr); // Renamed to camelCase
+    orderBook = bookMap.getOrCreate("dummy", g_dummyListener);
+    REQUIRE(orderBook != nullptr);
 
-    auto orderBook2 = bookMap.getOrCreate("dummy", g_dummyListener); // Renamed to camelCase, g_camelCase
-    REQUIRE(orderBook == orderBook2); // Renamed to camelCase
+    orderBook2 = bookMap.getOrCreate("dummy", g_dummyListener);
+    REQUIRE(orderBook == orderBook2);
 
-    auto orderBook3 = bookMap.getOrderBook("dummy"); // Renamed to camelCase
-    REQUIRE(orderBook == orderBook2); // Renamed to camelCase
-    REQUIRE(orderBook2 == orderBook3); // Renamed to camelCase
+    auto orderBook3 = bookMap.getOrderBook("dummy");
+    REQUIRE(orderBook == orderBook2);
+    REQUIRE(orderBook2 == orderBook3);
 }
 
 TEST_CASE("BookMap instruments", "[bookmap]") {

@@ -19,15 +19,15 @@
 struct Trade {
     friend class OrderBook;
 private:
-    Trade(Price price, Quantity quantity, const Order& aggressor, const Order& opposite) 
-        : m_price(price), m_quantity(quantity), m_aggressor(aggressor), m_opposite(opposite) {}
+    Trade(Price price, Quantity quantity, const Order& aggressor, const Order& opposite, NanosecondTimestamp ts) 
+        : m_price(price), m_quantity(quantity), m_aggressor(aggressor), m_opposite(opposite), execId(ts) {}
 public:
     const Price m_price;
     const Quantity m_quantity;
     const Order& m_aggressor;
     const Order& m_opposite;
     /** execution timestamp in nanoseconds since epoch */
-    const NanosecondTimestamp execId = std::chrono::duration_cast<std::chrono::nanoseconds>(epoch().time_since_epoch()).count();
+    const NanosecondTimestamp execId;
 };
 
 typedef void (*TradeReceiver)(Trade);
@@ -100,7 +100,7 @@ public: // Public interface
     OrderBook(const std::string &instrument, OrderBookListener& listener) : m_listener(listener), m_instrument(instrument) {} // Renamed to m_snake_case
     ~OrderBook() = default;
 
-    // C++20: Modern insertOrder with explicit error handling and stack overflow protection
+    // C++20: Modern insertOrder with explicit error handling and stack overflow protection // Renamed to camelCase
     OrderInsertResult insertOrder(
         std::shared_ptr<Order> order,
         std::source_location location = std::source_location::current()
@@ -111,8 +111,8 @@ public: // Public interface
     
     int cancelOrder(std::shared_ptr<Order> order);
 
-    QuoteOrders getQuotes(const std::string& sessionId, const std::string& quoteId, std::function<QuoteOrders()> createOrders);
-    void quote(const QuoteOrders& quotes, F bidPrice, int bidQuantity, F askPrice, int askQuantity);
+    QuoteOrders getQuotes(SessionIdView sessionId, QuoteIdView quoteId, std::function<QuoteOrders()> createOrders);
+    void quote(const QuoteOrders& quotes, Price bidPrice, Quantity bidQuantity, Price askPrice, Quantity askQuantity);
 
     const Book getBook() const;
     const Order getOrder(std::shared_ptr<Order> order);
@@ -127,5 +127,190 @@ public: // Public interface
     template<typename OrderType, typename... Args>
     std::shared_ptr<OrderType> createOrder(Args&&... args) {
         return std::make_shared<OrderType>(std::forward<Args>(args)...);
+    }
+};
+
+// Implementation of templated OrderBook methods
+template <typename TListener>
+OrderInsertResult OrderBook<TListener>::insertOrder(
+    std::shared_ptr<Order> order,
+    std::source_location location
+) {
+    // Prevents stack exhaustion during highly recursive matching/callback scenarios
+    ProductionSafety::StackGuard stack_guard;
+    
+    if (!stack_guard.isValid()) {
+        ErrorContext error(InsertError::StackOverflowProtection, ::EngineConstants::kRecursionDepthExceeded, location);
+        error.recursion_depth = StackProtection::currentDepth();
+        return unexpected(error);
+    }
+    
+    if (!order) {
+        return unexpected(ErrorContext(InsertError::NullOrder, ::EngineConstants::kOrderPointerNull, location));
+    }
+    
+    if (order->remainingQuantity() <= 0) {
+        return unexpected(ErrorContext(InsertError::InvalidQuantity, 
+            std::format("{}{}", ::EngineConstants::kInvalidOrderQuantity, order->remainingQuantity()), location));
+    }
+    
+    if (order->isOnList()) {
+        return unexpected(ErrorContext(InsertError::OrderAlreadyExists,
+            std::format("{} ID: {}", ::EngineConstants::kOrderAlreadyOnList, order->m_exchangeId), location));
+    }
+    
+    auto orderList = order->m_side == Order::Side::BUY ? &m_bids : &m_asks;
+    
+    // Insert the order
+    orderList->insertOrder(order);
+    m_listener.onOrder(*order);
+    
+    // Perform immediate execution against opposite side
+    matchOrders(order->m_side);
+    
+    return order->m_exchangeId;
+}
+
+template <typename TListener>
+void OrderBook<TListener>::matchOrders(Order::Side aggressorSide) {
+    const auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+
+    while (!m_bids.empty() && !m_asks.empty()) {
+        auto bid = m_bids.front();
+        auto ask = m_asks.front();
+
+        if (bid->isMarket() || ask->isMarket() || bid->m_price >= ask->m_price) {
+            Quantity qty = std::min(bid->m_remaining, ask->m_remaining);
+            // Trade at the price of the resting order
+            Price price = (aggressorSide == Order::Side::BUY) ? ask->m_price : bid->m_price;
+
+            std::shared_ptr<Order> aggressor = aggressorSide == Order::Side::BUY ? bid : ask;
+            std::shared_ptr<Order> opposite = aggressorSide == Order::Side::BUY ? ask : bid;
+
+            bid->fill(qty,price);
+            ask->fill(qty,price);
+
+            const Trade trade(price, qty, *aggressor, *opposite, now_ns);
+
+            if (bid->m_remaining == 0) {
+                m_bids.removeOrder(bid);
+            }
+            if (ask->m_remaining == 0) {
+                m_asks.removeOrder(ask);
+            }
+            m_listener.onOrder(*bid);
+            m_listener.onOrder(*ask);
+            m_listener.onTrade(trade);
+        } else {
+            break;
+        }
+    }
+    // Cancel any unexecuted volume for market orders
+    auto ordersOnSide = aggressorSide == Order::Side::BUY ? &m_bids : &m_asks;
+    if (!ordersOnSide->empty()) {
+        auto order = ordersOnSide->front();
+        if (order && order->isMarket()) {
+            order->cancel();
+            ordersOnSide->removeOrder(order);
+            m_listener.onOrder(*order);
+        }
+    }
+}
+
+template <typename TListener>
+QuoteOrders OrderBook<TListener>::getQuotes(SessionIdView sessionId, QuoteIdView quoteId, std::function<QuoteOrders()> createOrders) {
+    auto key = SessionQuoteId(std::string(sessionId), quoteId);
+    auto it = m_quotes.find(key);
+    if (it == m_quotes.end()) {
+        return m_quotes.emplace(key, createOrders()).first->second;
+    } else {
+        return it->second;
+    }
+}
+
+template <typename TListener>
+void OrderBook<TListener>::quote(const QuoteOrders& quotes, Price bidPrice, Quantity bidQuantity, Price askPrice, Quantity askQuantity) {
+    auto bid = quotes.m_bid;
+    auto ask = quotes.m_ask;
+    if(bid->isOnList()) {
+        m_bids.removeOrder(bid);
+    }
+    if(ask->isOnList()) {
+        m_asks.removeOrder(ask);
+    }
+    if (bidQuantity != Quantity(0)) {
+        bid->m_price = bidPrice;
+        bid->m_quantity = bidQuantity;
+        bid->m_remaining = bidQuantity;
+        bid->m_filled = Quantity(0);
+        m_bids.insertOrder(bid);
+        matchOrders(Order::Side::BUY);
+    }
+    if (askQuantity != Quantity(0)) {
+        ask->m_price = askPrice;
+        ask->m_quantity = askQuantity;
+        ask->m_remaining = askQuantity;
+        ask->m_filled = Quantity(0);
+        m_asks.insertOrder(ask);
+        matchOrders(Order::Side::SELL);
+    }
+}
+
+template <typename TListener>
+int OrderBook<TListener>::cancelOrder(std::shared_ptr<Order> order) {
+    if (!order) {
+        return -1;
+    }
+    
+    if (order && order->m_remaining > Quantity(0)) {
+        order->cancel();
+        auto ordersOnSide = order->m_side == Order::Side::BUY ? &m_bids : &m_asks;
+        
+        // Add safety check before removal
+        if (ordersOnSide && order->isOnList()) {
+            ordersOnSide->removeOrder(order);
+            m_listener.onOrder(*order);
+            return 0;
+        } else {
+            // Order not found in lists or not on list
+            return -1;
+        }
+    } else {
+        return -1;
+    }
+}
+
+template <typename TListener>
+const Book OrderBook<TListener>::getBook() const {
+    Book orderBookSnapshot;
+    auto snap = [](const PriceLevels& src, std::vector<BookLevel>& dst, std::vector<ExchangeId>& oids) {
+        auto fn = [&](const OrderList* orders) {
+            Quantity quantity(0);
+            for (auto itr = orders->begin(); itr != orders->end(); ++itr) {
+                auto order = *itr;
+                if (order) {
+                    quantity = quantity + order->remainingQuantity();
+                    oids.push_back(order->m_exchangeId);
+                }
+            }
+            dst.push_back({orders->m_price, quantity});
+        };
+        src.forEach(fn);
+    };
+    orderBookSnapshot.m_bids.reserve(m_bids.size());
+    orderBookSnapshot.m_asks.reserve(m_asks.size());
+    snap(m_bids, orderBookSnapshot.m_bids, orderBookSnapshot.m_bidOrderIds);
+    snap(m_asks, orderBookSnapshot.m_asks, orderBookSnapshot.m_askOrderIds);
+    return orderBookSnapshot;
+}
+
+template <typename TListener>
+const Order OrderBook<TListener>::getOrder(std::shared_ptr<Order> order) {
+    if (!order) {
+        throw std::invalid_argument(std::string(::EngineConstants::kOrderCannotBeNull));
+    }
+    return *order;
+}
     }
 };

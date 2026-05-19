@@ -19,8 +19,12 @@
 #include <format>
 #include <variant>
 #include <string_view>
+#include <stdexcept>
 
+#include "engine_constants.h"
 #include "constants.h"
+
+#define HAS_CPP23 (__cplusplus > 202002L || (defined(_MSVC_LANG) && _MSVC_LANG > 202002L))
 
 namespace orderbook {
 
@@ -57,93 +61,86 @@ struct ErrorContext {
         thread_id(std::this_thread::get_id())
     {}
     
-    // C++20 compatible format (no std::format)
     std::string toString() const {
-        std::ostringstream oss;
-        oss << "[" << std::chrono::duration_cast<std::chrono::milliseconds>(
-                timestamp.time_since_epoch()).count()
-            << "] InsertError::" << static_cast<int>(code) // Renamed to camelCase
-            << " at " << location.file_name() << ":" << location.line()
-            << " (depth: " << recursion_depth << ") - " << message;
-        return oss.str();
+        return std::format("[{}] InsertError::{} at {}:{} (depth: {}) - {}",
+            std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count(),
+            static_cast<int>(code),
+            location.file_name(),
+            location.line(),
+            recursion_depth,
+            message);
     }
 };
 
-// C++20: Custom expected-like type for insert operations
-template<typename T, typename E = ErrorContext>
+/**
+ * Helper struct to mimic std::unexpected
+ */
+template<typename E>
+struct Unexpected {
+    E error;
+    explicit Unexpected(E e) : error(std::move(e)) {}
+};
+
+/**
+ * Helper function to create an unexpected result
+ */
+template<typename E>
+inline Unexpected<E> unexpected(E e) {
+    return Unexpected<E>(std::move(e));
+}
+
+/**
+ * C++20 Implementation of an Expected-like Result type.
+ * Mimics C++23 std::expected to allow modern error handling in C++20.
+ */
+template<typename T, typename E>
 class InsertResult {
-public:
-    using value_type = T;
-    using error_type = E;
-
-private:
-    std::variant<T, E> data_;
-    bool has_value_;
+    std::variant<T, E> m_data;
+    bool m_hasValue;
 
 public:
-    // Constructors
-    InsertResult(const T& value) : data_(value), has_value_(true) {}
-    InsertResult(T&& value) : data_(std::move(value)), has_value_(true) {}
-    InsertResult(const E& error) : data_(error), has_value_(false) {}
-    InsertResult(E&& error) : data_(std::move(error)), has_value_(false) {}
+    InsertResult(T val) : m_data(std::move(val)), m_hasValue(true) {}
+    InsertResult(E err) : m_data(std::move(err)), m_hasValue(false) {}
 
-    // Accessors
-    [[nodiscard]] bool hasValue() const noexcept { return has_value_; }
-    [[nodiscard]] explicit operator bool() const noexcept { return has_value_; }
+    // Mimic C++23 std::expected construction from std::unexpected
+    InsertResult(const Unexpected<E>& unexp) : m_data(unexp.error), m_hasValue(false) {}
+    InsertResult(Unexpected<E>&& unexp) : m_data(std::move(unexp.error)), m_hasValue(false) {}
 
-    [[nodiscard]] T& value() & {
-        if (!has_value_) { throw std::bad_variant_access(); }
-        return std::get<T>(data_);
-    }
+    [[nodiscard]] bool has_value() const noexcept { return m_hasValue; }
+    [[nodiscard]] explicit operator bool() const noexcept { return m_hasValue; }
     
-    [[nodiscard]] const T& value() const & {
-        if (!has_value_) { throw std::bad_variant_access(); }
-        return std::get<T>(data_);
-    }
-    
-    [[nodiscard]] T&& value() && {
-        if (!has_value_) { throw std::bad_variant_access(); }
-        return std::get<T>(std::move(data_));
+    [[nodiscard]] const T& value() const {
+        if (!m_hasValue) throw std::bad_variant_access();
+        return std::get<T>(m_data);
     }
 
-    [[nodiscard]] E& error() & {
-        if (has_value_) { throw std::bad_variant_access(); }
-        return std::get<E>(data_);
-    }
-    
-    [[nodiscard]] const E& error() const & {
-        if (has_value_) throw std::bad_variant_access();
-        return std::get<E>(data_);
+    [[nodiscard]] const E& error() const {
+        if (m_hasValue) throw std::bad_variant_access();
+        return std::get<E>(m_data);
     }
 
-    // Monadic operations
-    template <typename Func>
-    auto andThen(Func&& func) -> InsertResult<std::invoke_result_t<Func, T>, E> {
-        if (has_value_) {
-            return InsertResult<std::invoke_result_t<Func, T>, E>(func(value()));
-        }
-        return InsertResult<std::invoke_result_t<Func, T>, E>(error());
-    }
-
-    template <typename Func>
-    auto orElse(Func&& func) -> InsertResult {
-        if (!has_value_) {
-            return func(error());
-        }
-        return *this;
-    }
-
-    template <typename Func>
-    auto transform(Func&& func) -> InsertResult<std::invoke_result_t<Func, T>, E> {
-        if (has_value_) {
-            return InsertResult<std::invoke_result_t<Func, T>, E>(func(value()));
-        }
-        return InsertResult<std::invoke_result_t<Func, T>, E>(error());
-    }
+    // Support for C++23-style "unexpected" construction
+    static InsertResult unexpected(E err) { return InsertResult(std::move(err)); }
 };
 
-// Convenience type for order ID results
-using OrderInsertResult = InsertResult<ExchangeId>;
+/**
+ * Specialization for InsertResult to support implicit conversion from Unexpected
+ */
+namespace detail {
+    template<typename T, typename E>
+    struct ResultTraits {
+        using Type = InsertResult<T, E>;
+    };
+}
+
+// Re-define Unexpected conversion logic if needed, or simply use the class directly.
+// For simplicity in this refactor, we'll use the aliased names.
+
+/**
+ * C++23: Using std::expected for modern error handling
+ * Fallback to custom InsertResult for C++20 environments
+ */
+using OrderInsertResult = InsertResult<ExchangeId, ErrorContext>;
 
 // ====================================================================
 // Error Handling Strategies
@@ -185,7 +182,7 @@ public:
         : m_config(std::move(config)),
           m_lastFailure(std::chrono::steady_clock::now())
     {
-        // Default logger using C++23 std::format
+        // Default logger using std::format
         logger_ = [](const ErrorContext& ctx) {
             std::cerr << std::format("[ORDERBOOK ERROR] {}\n", ctx.toString());
         };
@@ -210,24 +207,24 @@ public:
 
     // Main handle method
     template<typename T>
-    InsertResult<T> handle(const ErrorContext& ctx) const {
-        // Always log first // Renamed to camelCase
+    InsertResult<T, ErrorContext> handle(const ErrorContext& ctx) const {
+        // Always log first
         if (logger_) {
             logger_(ctx);
         }
         // Record failure for circuit breaker
         if (m_config.enable_circuit_breaker) {
-            m_failureCount.fetch_add(1, std::memory_order_relaxed);
+            m_failureCount.fetch_add(1, std::memory_order_seq_cst);
             m_lastFailure.store(std::chrono::steady_clock::now(), std::memory_order_relaxed);
         }
 
         // Execute strategy
         switch (m_config.primary_strategy) {
             case ErrorStrategy::LogAndContinue:
-                return ctx;
+                return InsertResult<T, ErrorContext>(ctx);
                 
             case ErrorStrategy::LogAndRetry:
-                return ctx; // Caller must handle retry
+                return InsertResult<T, ErrorContext>(ctx); // Caller must handle retry
                 
             case ErrorStrategy::ThrowException:
                 throw std::runtime_error(ctx.toString());
@@ -239,16 +236,16 @@ public:
                 if (m_config.custom_handler) {
                     m_config.custom_handler(ctx);
                 }
-                return ctx;
+                return InsertResult<T, ErrorContext>(ctx);
         }
 
-        return ctx;
+        return InsertResult<T, ErrorContext>(ctx);
     }
 
     // C++20: Retry logic with backoff
     template<typename T, typename Func>
-    InsertResult<T> executeWithRetry(Func&& operation) {
-        InsertResult<T> last_result;
+    InsertResult<T, ErrorContext> executeWithRetry(Func&& operation) {
+        std::optional<InsertResult<T, ErrorContext>> last_result;
         for (int attempt = 0; attempt <= m_config.max_retries; ++attempt) {
             auto result = operation();
             // result is declared here, so it's scope is within the loop.
@@ -268,7 +265,7 @@ public:
         }
         
         // All retries exhausted - return the last error result
-        return last_result;
+        return *last_result;
     }
 
     // Circuit breaker check
@@ -401,29 +398,13 @@ inline OrderInsertResult legacyToModern(std::optional<ExchangeId> legacyResult,
     if (legacyResult.has_value()) {
         return OrderInsertResult(*legacyResult);
     }
-    return OrderInsertResult(ErrorContext(InsertError::InternalError, orderbook::EngineConstants::kLegacyNulloptResult, loc));
-}
- 
-// Helper for mandatory result checking (C++23 [[nodiscard]] with message)
-[[nodiscard("Insert order result must be checked")]]
-inline bool checkResult(const OrderInsertResult& result) {
-    return result.hasValue();
-}
-
-// Monadic result chaining (C++20 style)
-template <typename T, typename Func>
-auto andThen(InsertResult<T> result, Func&& func) -> InsertResult<typename std::invoke_result_t<Func, T>::value_type> {
-    if (result.hasValue()) { // Renamed to camelCase
-        return func(result.value());
-    }
-    return InsertResult<typename std::invoke_result_t<Func, T>::value_type>(result.error());
+    return OrderInsertResult(ErrorContext(InsertError::InternalError, ::EngineConstants::kLegacyNulloptResult, loc));
 }
 
 } // namespace orderbook
 
 // Using declarations for convenience
-using orderbook::InsertResult;
-using orderbook::OrderInsertResult;
+using orderbook::OrderInsertResult; // Renamed to camelCase
 using orderbook::InsertError;
 using orderbook::ErrorContext;
 using orderbook::InsertErrorHandler;
@@ -432,5 +413,5 @@ using orderbook::ErrorStrategy; // Renamed to camelCase
 using orderbook::StackProtection;
 using orderbook::StackGuard;
 using orderbook::legacyToModern;
-using orderbook::checkResult;
-using orderbook::andThen;
+using orderbook::InsertResult;
+using orderbook::unexpected;
