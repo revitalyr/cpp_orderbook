@@ -10,6 +10,8 @@
 #include <xmmintrin.h>
 #endif
 
+namespace orderbook {
+
 class SpinLock {
 private: // Internal state // Renamed to camelCase
     std::atomic_flag m_mutex = ATOMIC_FLAG_INIT; // Atomic flag for the spinlock // Renamed to m_snake_case
@@ -42,3 +44,4 @@ public: // Public interface // Renamed to camelCase
 };
 
 typedef std::lock_guard<SpinLock> Guard;
+} // namespace orderbook

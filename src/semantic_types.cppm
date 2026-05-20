@@ -1,5 +1,4 @@
-#pragma once
-
+module;
 #include <chrono>
 #include <cstdint>
 #include <cstddef>
@@ -7,7 +6,9 @@
 #include <string_view>
 #include "fixed.h"
 
-namespace orderbook {
+export module orderbook.semantic_types;
+
+export namespace orderbook {
 
 // ============================================================================
 // NUMERIC TYPE ALIASES - Trading Domain

@@ -1,14 +1,15 @@
 #pragma once
 
-#include <atomic>
-#include <cstddef>
-#include <memory>
-#include <vector>
+#include <atomic>    // For std::atomic
+#include <cstddef>   // For size_t
+#include <memory>    // For std::unique_ptr
+#include <new>       // For placement new
+#include <vector>    // For std::vector
 
 #include "spinlock.h"
 #include "constants.h"
 
-struct Order; // Forward declaration in global namespace
+namespace orderbook { struct Order; } // Forward declaration within orderbook namespace
 
 namespace orderbook {
 
@@ -28,8 +29,8 @@ namespace orderbook {
 template<typename T, size_t BlockSize = kMemoryPoolBlockSize>
 class MemoryPool {
 public:
-    // Cache-line aligned storage for the object
-    static constexpr size_t ActualNodeSize = (sizeof(T) > kNodeSize) ? sizeof(T) : kNodeSize;
+    // Cache-line aligned storage for the object (using kNodeSize from constants.h)
+    static constexpr size_t ActualNodeSize = (sizeof(T) > orderbook::kNodeSize) ? sizeof(T) : orderbook::kNodeSize;
     
     struct PoolNode {
         alignas(64) char object_storage[ActualNodeSize]; 
@@ -137,7 +138,7 @@ public:
         return m_capacity.load(std::memory_order_relaxed); // Renamed to m_snake_case
     }
 
-private:
+public: // Made public to allow MemoryPoolAllocator to use them
     PoolNode* popFree() { // Renamed to camelCase
         std::lock_guard lock(m_lock);
         if (!m_freeList) return nullptr;

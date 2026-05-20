@@ -1,10 +1,14 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <stdexcept>
+#include <string> // For std::string
 #include <vector>
+#include <optional>
 
-#include "core/test.h"
-#include "safety/production_safety_inline.h"
+#include "safety/production_safety.h" // Explicitly include ProductionSafety
+import orderbook;
+
+using namespace orderbook;
 
 struct TestListener : ExchangeListener {
     std::vector<Trade> m_trades;
@@ -19,9 +23,9 @@ struct TestListener : ExchangeListener {
 
 TEST_CASE("Exchange insert order buy", "[exchange]") {
     // Disable production safety in tests to prevent recursion with Boost Test Framework
-    ProductionSafety::enableSafety(false);
+    ::ProductionSafety::enableSafety(false);
     
-    TestExchange exchange;
+    TestExchange<Exchange::NoOpListener> exchange;
 
     auto order1Id = exchange.placeBuyOrder(1.0, 10, "1");
     auto order2Id = exchange.placeBuyOrder(2.0, 10, "2");
@@ -34,7 +38,7 @@ TEST_CASE("Exchange insert order buy", "[exchange]") {
 }
 
 TEST_CASE("Exchange insert order buy 2", "[exchange]") {
-    TestExchange<ExchangeListener> exchange; // Use default listener
+    TestExchange<Exchange::NoOpListener> exchange; // Use default listener
 
     auto order2Id = exchange.placeBuyOrder(2.0, 10, "2");
     auto order1Id = exchange.placeBuyOrder(1.0, 10, "1");
@@ -49,7 +53,7 @@ TEST_CASE("Exchange insert order buy 2", "[exchange]") {
 }
 
 TEST_CASE("Exchange insert order sell", "[exchange]") {
-    TestExchange<ExchangeListener> exchange; // Use default listener
+    TestExchange<Exchange::NoOpListener> exchange; // Use default listener
 
     auto order1Id = exchange.placeSellOrder(1.0, 10, "1");
     auto order2Id = exchange.placeSellOrder(2.0, 10, "2");
@@ -62,7 +66,7 @@ TEST_CASE("Exchange insert order sell", "[exchange]") {
 }
 
 TEST_CASE("Exchange insert order sell 2", "[exchange]") {
-    TestExchange<ExchangeListener> exchange; // Use default listener
+    TestExchange<Exchange::NoOpListener> exchange; // Use default listener
 
     auto order2Id = exchange.placeSellOrder(2.0, 10, "2");
     auto order1Id = exchange.placeSellOrder(1.0, 10, "1");
@@ -75,7 +79,7 @@ TEST_CASE("Exchange insert order sell 2", "[exchange]") {
 }
 
 TEST_CASE("Exchange insert order buy same price", "[exchange]") {
-    TestExchange<ExchangeListener> exchange; // Use default listener
+    TestExchange<Exchange::NoOpListener> exchange; // Use default listener
 
     auto order1Id = exchange.placeBuyOrder(1.0, 10, "1");
     auto order2Id = exchange.placeBuyOrder(2.0, 10, "2");
@@ -84,16 +88,15 @@ TEST_CASE("Exchange insert order buy same price", "[exchange]") {
     REQUIRE(exchange.bidCount() == 2);
     REQUIRE(exchange.getBook(kDefaultInstrument).value().m_bidOrderIds.size() == 3);
     REQUIRE(exchange.askCount() == 0);
-
+    
     REQUIRE(exchange.bidIndex(order2Id.value()) == 0);
     REQUIRE(exchange.bidIndex(order3Id.value()) == 1);
     REQUIRE(exchange.bidIndex(order1Id.value()) == 2);
 }
 
 TEST_CASE("Exchange fill order", "[exchange]") {
-
     TestListener testListener;
-
+    
     TestExchange<TestListener> exchange(testListener);
 
     auto order1Id = exchange.placeBuyOrder(1.0, 10, "1");
@@ -133,7 +136,7 @@ TEST_CASE("Exchange partial fill", "[exchange]") {
 TEST_CASE("Exchange cancel order", "[exchange]") {
 
     TestListener testListener;
-
+    
     TestExchange<TestListener> exchange(testListener);
 
     auto order1Id = exchange.placeBuyOrder(1.0, 20, "1");
@@ -157,7 +160,7 @@ TEST_CASE("Exchange cancel invalid", "[exchange]") {
 TEST_CASE("Exchange market buy", "[exchange]") {
 
     TestListener testListener;
-
+    
     TestExchange<TestListener> exchange(testListener);
 
     exchange.placeSellOrder(1.0, 20, "1");
@@ -172,7 +175,7 @@ TEST_CASE("Exchange market buy", "[exchange]") {
 TEST_CASE("Exchange market buy cancel remaining", "[exchange]") {
 
     TestListener testListener;
-
+    
     TestExchange<TestListener> exchange(testListener);
 
     exchange.placeSellOrder(1.0, 20, "1");
@@ -187,7 +190,7 @@ TEST_CASE("Exchange market buy cancel remaining", "[exchange]") {
 TEST_CASE("Exchange market buy multi level", "[exchange]") {
 
     TestListener testListener;
-
+    
     TestExchange<TestListener> exchange(testListener);
 
     exchange.placeSellOrder(1.0, 20, "1");
@@ -207,7 +210,7 @@ TEST_CASE("Exchange market buy multi level", "[exchange]") {
 TEST_CASE("Exchange market buy one sided", "[exchange]") {
 
     TestListener testListener;
-
+    
     TestExchange<TestListener> exchange(testListener);
 
     exchange.placeMarketBuyOrder(30, "1");

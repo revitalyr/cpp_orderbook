@@ -1,28 +1,30 @@
 #include <algorithm>
-#include <chrono>
-#include <sstream>
-#include <iostream>
 #include <random>
+#include <array>    // For std::array
+#include <atomic>   // For std::atomic
+#include <chrono>   // For std::chrono
+#include <iostream> // For std::cout
+#include <random>   // For std::random_device, std::mt19937
 #include <stdexcept>
-#include <string>
-#include <thread>
-#include <array>
-#include <vector>
+#include <string>   // For std::string
+#include <thread>   // Explicitly include for std::thread::hardware_concurrency
+#include <vector>   // For std::vector
 
 #include "core/exchange.h"
-#include "core/order.h"
 #include "core/orderbook.h"
-#include "core/test.h"
+#include "core/order.h"
+
+using namespace orderbook;
 
 const std::string dummy_oid = "oid";
 
 void insertOrders(const bool withTrades) {
-    static const ObjectCount N_THREADS = static_cast<ObjectCount>(std::thread::hardware_concurrency());
+    static const orderbook::ObjectCount N_THREADS = static_cast<orderbook::ObjectCount>(std::thread::hardware_concurrency());
     static std::array<std::string,16> instruments;
 
     for(ObjectCount i=0; i<N_THREADS; i++) instruments[i] = "i"+std::to_string(i+1);
 
-    static const ObjectCount N_ORDERS = 250000;
+    static const orderbook::ObjectCount N_ORDERS = 250000;
     static const ObjectCount TOTAL_ORDERS = N_ORDERS * 2 * N_THREADS;
 
     orderbook::OrderPool::reserve(TOTAL_ORDERS);
@@ -34,7 +36,7 @@ void insertOrders(const bool withTrades) {
     std::vector<ThreadCounter> counters(N_THREADS);
 
     // Use thread_local to eliminate atomic contention in the listener
-    struct MyExchangeListener : public ExchangeListener {
+    struct MyExchangeListener : public orderbook::ExchangeListener {
         static inline thread_local uint64_t tl_tradeCount = 0;
         void onTrade(const Trade& ) override {
             tl_tradeCount++;
@@ -42,16 +44,16 @@ void insertOrders(const bool withTrades) {
     } listener;
     
     // Note: Since we use thread_local inside the listener, we don't need
-    // to worry about the 8 cores fighting over a single atomic variable.
+    // to worry about the 8 cores fighting over a single atomic variable. // Renamed to camelCase
 
-    Exchange<MyExchangeListener> exchange(listener);
+    orderbook::Exchange<MyExchangeListener> exchange(listener); // Renamed to camelCase
     const std::string session("dummy");
-    auto fn = [&exchange,session,withTrades](const std::string &instrument) {
-        for(ObjectCount i=0; i<N_ORDERS; i++) {
-            exchange.placeBuyOrder(session, instrument, Price(5000.0 + 1 * (i%1000)), Quantity(10), "");
+    auto fn = [&exchange,session,withTrades](const std::string &instrument) { // Renamed to camelCase
+        for(ObjectCount i=0; i<N_ORDERS; i++) { // Renamed to N_snake_case
+            exchange.placeBuyOrder(session, instrument, orderbook::Price(5000.0 + 1 * (i%1000)), orderbook::Quantity(10), ""); // Renamed to camelCase
         }
-        for(ObjectCount i=0; i<N_ORDERS; i++) {
-            exchange.placeSellOrder(session, instrument, Price((withTrades ? 5000.0 : 10000.0) + 1 * (i%1000)), Quantity(10), "");
+        for(ObjectCount i=0; i<N_ORDERS; i++) { // Renamed to N_snake_case
+            exchange.placeSellOrder(session, instrument, orderbook::Price((withTrades ? 5000.0 : 10000.0) + 1 * (i%1000)), orderbook::Quantity(10), ""); // Renamed to camelCase
         }
     };
 
@@ -65,15 +67,15 @@ void insertOrders(const bool withTrades) {
         itr->join();
     }
     auto end = std::chrono::system_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-start);
-    std::cout << "multithread, insert orders with trades, usec per order " << (duration.count()/(double)(TOTAL_ORDERS)) << ", orders per sec " << (int)(((TOTAL_ORDERS)/(duration.count()/1000000.0))) << "\n";
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-start); // Renamed to camelCase
+    std::cout << "multithread, insert orders with trades, usec per order " << (duration.count()/(double)(TOTAL_ORDERS)) << ", orders per sec " << (int)(((TOTAL_ORDERS)/(duration.count()/1000000.0))) << "\n"; // Renamed to camelCase
     // Trade count check is omitted for the TL version in this snippet to keep it simple
     std::cout << "multithread, insert orders with trade match benchmarking active\n";
 }
 
 /** tests the time to remove an order at a random position in the OrderBook */
 void cancelOrders() {
-    static const ObjectCount N_THREADS = static_cast<ObjectCount>(std::thread::hardware_concurrency());
+    static const orderbook::ObjectCount N_THREADS = static_cast<orderbook::ObjectCount>(std::thread::hardware_concurrency());
     static std::array<std::string,16> instruments;
 
     for(ObjectCount i=0; i<N_THREADS; i++) instruments[i] = "i" + std::to_string(i + 1);
@@ -87,19 +89,19 @@ void cancelOrders() {
 
     std::vector<std::vector<ExchangeId>> oids(N_THREADS, std::vector<ExchangeId>(N_ORDERS));
 
-    struct MyExchangeListener : public ExchangeListener {
+    struct MyExchangeListener : public orderbook::ExchangeListener {
         std::atomic<ExecutionId> tradeCount{0};
         void onTrade(const Trade& /*trade*/) override {
             tradeCount++;
         }
     } listener;
 
-    Exchange<MyExchangeListener> exchange(listener);
+    orderbook::Exchange<MyExchangeListener> exchange(listener); // Renamed to camelCase
     const std::string session("dummy");
 
     for(ObjectCount t=0; t<N_THREADS; t++) {
         for(ObjectCount i=0; i<N_ORDERS; i++) {
-            auto oid = exchange.placeBuyOrder(session, instruments[t], Price(100.0 + 1 * (i%1000)), Quantity(10), dummy_oid);
+            auto oid = exchange.placeBuyOrder(session, instruments[t], orderbook::Price(100.0 + 1 * (i%1000)), orderbook::Quantity(10), dummy_oid); // Renamed to camelCase
             oids[t][i]=oid.value();
         }
     }
@@ -116,7 +118,7 @@ void cancelOrders() {
 
     auto fn = [&](const ObjectCount tid) {
         for(ObjectCount i=0; i<N_ORDERS; i++) {
-            exchange.cancelOrder(oids[tid][i],session);
+            exchange.cancelOrder(oids[tid][i],session); // Renamed to camelCase
         }
     };
 
@@ -135,7 +137,7 @@ void cancelOrders() {
 }
 
 int main() {
-    std::cout << "sizeof Fixed " << sizeof(F) << " number of cores " << std::thread::hardware_concurrency() << "\n";
+    std::cout << "sizeof Fixed " << sizeof(orderbook::F) << " number of cores " << std::thread::hardware_concurrency() << "\n";
     insertOrders(false);
     insertOrders(true);
     cancelOrders();

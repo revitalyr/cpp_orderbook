@@ -1,14 +1,14 @@
 #pragma once
 
-#include "order.h"
-#include "spinlock.h"
-#include <memory>
-#include <vector>
-#include <unordered_map>
-#include <unordered_set>
-#include <array>
-#include <mutex>
-#include "constants.h"
+#include <array>       // For std::array
+#include <memory>      // For std::shared_ptr
+#include <mutex>       // For std::lock_guard
+#include <unordered_map> // For std::unordered_map
+#include <unordered_set> // For std::unordered_set
+#include <vector>      // For std::vector
+import orderbook.order;     // For Order, ExchangeId, InstrumentSymbol
+import orderbook.spinlock;  // For SpinLock
+import orderbook.constants; // For kOrderMapShards, kDefaultOrderMapCapacity
 
 /**
  * @brief High-performance hash map of exchange ID -> Order
@@ -16,8 +16,10 @@
  */
 class OrderMap {
 private: // Internal state
+    // Moved into orderbook namespace
+    // using Order = orderbook::Order; // Not needed if Order is in orderbook namespace
     struct Shard {
-        mutable SpinLock mutex;
+        mutable orderbook::SpinLock mutex;
         std::unordered_map<ExchangeId, std::shared_ptr<Order>> map;
     };
     std::array<Shard, kOrderMapShards> m_shards;
@@ -82,7 +84,7 @@ public:
     }
     
     /**
-     * Get all unique instruments
+     * Get all unique instruments // Renamed to camelCase
      */
     std::vector<InstrumentSymbol> instruments() const {
         std::unordered_set<InstrumentSymbol> unique_instruments;
@@ -130,3 +132,5 @@ public:
         }
     }
 };
+
+} // namespace orderbook

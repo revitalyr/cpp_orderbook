@@ -1,16 +1,17 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <thread>
+#include <mutex> // For std::lock_guard
 #include <vector>
-#include "core/exchange.h" // For ExchangeListener
+import orderbook;
 
-#include "core/spinlock.h"
+using namespace orderbook;
 
 TEST_CASE("SpinLock basic operations", "[spinlock]") {
     SpinLock lock;
 
     {
-        Guard guard(lock);
+        orderbook::Guard guard(lock);
         REQUIRE_FALSE(lock.tryLock());
         REQUIRE(lock.isLocked());
     }
@@ -28,12 +29,12 @@ TEST_CASE("SpinLock multithreaded", "[spinlock]") {
     long count = 0;
 
     {
-        Guard guard(lock);
+        orderbook::Guard guard(lock);
 
         auto fn = [&]() {
             for (int i = 0; i < 1000000; i++) {
                 {
-                    Guard guard_inner(lock);
+                    orderbook::Guard guard_inner(lock);
                     count++;
                 }
             }

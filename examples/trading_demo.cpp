@@ -1,11 +1,13 @@
-#include "core/exchange.h"
-#include "core/test.h"
-#include <iostream>
-#include <memory>
-#include <vector>
-#include <chrono>
-#include <iomanip>
-#include "core/exchange.h" // For ExchangeListener
+#include <chrono>   // For std::chrono
+#include <iomanip>  // For std::fixed, std::setprecision
+#include <iostream> // For std::cout, std::endl
+#include <memory>   // For std::shared_ptr, std::weak_ptr
+#include <string>   // For std::string, std::to_string
+#include <vector>   // For std::vector
+
+import orderbook;
+
+using namespace orderbook;
 
 struct DemoListener : ExchangeListener {
     // Empty listener for demo purposes
@@ -50,31 +52,31 @@ private:
         std::cout << "✅ Exchange created with smart pointer architecture" << std::endl;
         
         // Place buy orders
-        auto buy1 = exchange.buy("session1", "AAPL", 150.25, 100, "buy1");
-        auto buy2 = exchange.buy("session2", "AAPL", 150.20, 50, "buy2");
+        auto buy1 = exchange.placeBuyOrder("session1", "AAPL", orderbook::Price(150.25), orderbook::Quantity(100), "buy1");
+        auto buy2 = exchange.placeBuyOrder("session2", "AAPL", orderbook::Price(150.20), orderbook::Quantity(50), "buy2");
         
-        if (buy1.has_value() && buy2.has_value()) {
-            std::cout << "✅ Buy orders placed successfully" << std::endl;
+        if (buy1 && buy2) {
+            std::cout << "✅ Buy orders placed successfully" << std::endl; // Renamed to camelCase
             std::cout << "   Buy1 ID: " << buy1.value() << std::endl;
             std::cout << "   Buy2 ID: " << buy2.value() << std::endl;
         }
         
         // Place sell orders
-        auto sell1 = exchange.sell("session3", "AAPL", 150.30, 75, "sell1");
-        auto sell2 = exchange.sell("session4", "AAPL", 150.35, 25, "sell2");
+        auto sell1 = exchange.placeSellOrder("session3", "AAPL", orderbook::Price(150.30), orderbook::Quantity(75), "sell1");
+        auto sell2 = exchange.placeSellOrder("session4", "AAPL", orderbook::Price(150.35), orderbook::Quantity(25), "sell2");
         
-        if (sell1.has_value() && sell2.has_value()) {
+        if (sell1 && sell2) {
             std::cout << "✅ Sell orders placed successfully" << std::endl;
             std::cout << "   Sell1 ID: " << sell1.value() << std::endl;
             std::cout << "   Sell2 ID: " << sell2.value() << std::endl;
         }
         
         // Check order book
-        auto book = exchange.book("AAPL");
-        if (book.has_value()) {
-            std::cout << "✅ Order book retrieved with " 
-                      << book.value().bids.size() << " bid levels and " 
-                      << book.value().asks.size() << " ask levels" << std::endl;
+        auto book = exchange.getBook("AAPL");
+        if (book) {
+            std::cout << "✅ Order book retrieved with " // Renamed to camelCase
+                      << book.value().m_bids.size() << " bid levels and " 
+                      << book.value().m_asks.size() << " ask levels" << std::endl;
         }
     }
     
@@ -85,8 +87,8 @@ private:
         std::cout << "Testing shared_ptr lifecycle management..." << std::endl;
         
         // Create orders using factory methods
-        auto order1 = TestOrder::create(1001, 100.50, 10, Order::BUY);
-        auto order2 = TestOrder::create(1002, 101.00, 15, Order::SELL);
+        auto order1 = TestOrder::create(orderbook::ExchangeId(1001), orderbook::Price(100.50), orderbook::Quantity(10), orderbook::Order::Side::BUY);
+        auto order2 = TestOrder::create(orderbook::ExchangeId(1002), orderbook::Price(101.00), orderbook::Quantity(15), orderbook::Order::Side::SELL);
         
         std::cout << "✅ Orders created with std::shared_ptr" << std::endl;
         std::cout << "   Order1 use count: " << order1.use_count() << std::endl;
@@ -133,19 +135,19 @@ private:
         Exchange<DemoListener> exchange(listener);
         
         // Create a market with multiple orders
-        std::vector<long> order_ids;
+        std::vector<ExchangeId> order_ids;
         
         // Add multiple buy orders at different price levels
-        for (int i = 0; i < 5; i++) {
-            auto result = exchange.buy("market_maker", "GOOGL", 2500.0 - i * 0.10, 100, "buy_" + std::to_string(i));
+        for (ObjectCount i = 0; i < 5; i++) {
+            auto result = exchange.placeBuyOrder("market_maker", "GOOGL", orderbook::Price(2500.0 - i * 0.10), orderbook::Quantity(100), "buy_" + std::to_string(i));
             if (result.has_value()) {
                 order_ids.push_back(result.value());
             }
         }
         
         // Add multiple sell orders
-        for (int i = 0; i < 5; i++) {
-            auto result = exchange.sell("market_maker", "GOOGL", 2501.0 + i * 0.10, 100, "sell_" + std::to_string(i));
+        for (ObjectCount i = 0; i < 5; i++) {
+            auto result = exchange.placeSellOrder("market_maker", "GOOGL", orderbook::Price(2501.0 + i * 0.10), orderbook::Quantity(100), "sell_" + std::to_string(i));
             if (result.has_value()) {
                 order_ids.push_back(result.value());
             }
@@ -154,26 +156,26 @@ private:
         std::cout << "✅ Created " << order_ids.size() << " orders across multiple price levels" << std::endl;
         
         // Check the order book state
-        auto book = exchange.book("GOOGL");
-        if (book.has_value()) {
+        auto book = exchange.getBook("GOOGL");
+        if (book) {
             std::cout << "✅ Order book state:" << std::endl;
-            std::cout << "   Bid levels: " << book.value().bids.size() << std::endl;
-            std::cout << "   Ask levels: " << book.value().asks.size() << std::endl;
+            std::cout << "   Bid levels: " << book.value().m_bids.size() << std::endl;
+            std::cout << "   Ask levels: " << book.value().m_asks.size() << std::endl;
             
-            if (!book.value().bids.empty()) {
+            if (!book.value().m_bids.empty()) {
                 std::cout << "   Best bid: $" << std::fixed << std::setprecision(2) 
-                          << book.value().bids[0].price << std::endl;
+                          << book.value().m_bids[0].m_price << std::endl;
             }
-            if (!book.value().asks.empty()) {
+            if (!book.value().m_asks.empty()) {
                 std::cout << "   Best ask: $" << std::fixed << std::setprecision(2) 
-                          << book.value().asks[0].price << std::endl;
+                          << book.value().m_asks[0].m_price << std::endl;
             }
         }
         
         // Cancel some orders
         int cancelled = 0;
         for (size_t i = 0; i < std::min(size_t(3), order_ids.size()); i++) {
-            if (exchange.cancel(order_ids[i], "market_maker")) {
+            if (exchange.cancelOrder(ExchangeId(order_ids[i]), "market_maker")) {
                 cancelled++;
             }
         }
@@ -181,11 +183,11 @@ private:
         std::cout << "✅ Cancelled " << cancelled << " orders successfully" << std::endl;
         
         // Check final state
-        auto final_book = exchange.book("GOOGL");
-        if (final_book.has_value()) {
+        auto final_book = exchange.getBook("GOOGL");
+        if (final_book) {
             std::cout << "✅ Final order book state:" << std::endl;
-            std::cout << "   Bid levels: " << final_book.value().bids.size() << std::endl;
-            std::cout << "   Ask levels: " << final_book.value().asks.size() << std::endl;
+            std::cout << "   Bid levels: " << final_book.value().m_bids.size() << std::endl;
+            std::cout << "   Ask levels: " << final_book.value().m_asks.size() << std::endl;
         }
     }
     
@@ -201,11 +203,11 @@ private:
         auto start = std::chrono::high_resolution_clock::now();
         
         // Create many orders rapidly
-        std::vector<long> order_ids;
+        std::vector<ExchangeId> order_ids;
         order_ids.reserve(num_orders);
         
         for (int i = 0; i < num_orders; i++) {
-            auto result = exchange.buy("perf_test", "MSFT", 300.0 + (i % 100) * 0.01, 10, "perf_" + std::to_string(i));
+            auto result = exchange.placeBuyOrder("perf_test", "MSFT", orderbook::Price(300.0 + (i % 100) * 0.01), orderbook::Quantity(10), "perf_" + std::to_string(i));
             if (result.has_value()) {
                 order_ids.push_back(result.value());
             }
@@ -223,7 +225,7 @@ private:
         start = std::chrono::high_resolution_clock::now();
         
         int found_orders = 0;
-        for (long id : order_ids) {
+        for (ExchangeId id : order_ids) {
             auto order = exchange.getOrder(id);
             if (order.has_value()) {
                 found_orders++;
@@ -247,7 +249,7 @@ private:
         Exchange<DemoListener> exchange(listener);
         
         // Test invalid order cancellation
-        bool cancel_result = exchange.cancel(99999, "invalid_session");
+        bool cancel_result = exchange.cancelOrder(ExchangeId(99999), "invalid_session");
         std::cout << "✅ Invalid order cancellation handled: " << (cancel_result ? "FAILED" : "CORRECT") << std::endl;
         
         // Test order retrieval for non-existent order
@@ -255,11 +257,11 @@ private:
         std::cout << "✅ Non-existent order retrieval handled: " << (order.has_value() ? "FAILED" : "CORRECT") << std::endl;
         
         // Test book retrieval for non-existent instrument
-        auto book = exchange.book("NONEXISTENT");
+        auto book = exchange.getBook("NONEXISTENT");
         std::cout << "✅ Non-existent instrument book handled: " << (book.has_value() ? "FAILED" : "CORRECT") << std::endl;
         
         // Test smart pointer null checks
-        auto test_order = TestOrder::create(1, 100.0, 10, Order::BUY);
+        auto test_order = TestOrder::create(orderbook::ExchangeId(1), orderbook::Price(100.0), orderbook::Quantity(10), orderbook::Order::Side::BUY);
         test_order.reset();
         
         if (!test_order) {

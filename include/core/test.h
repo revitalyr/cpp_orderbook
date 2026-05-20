@@ -1,19 +1,11 @@
 #pragma once
 
-#include <memory>
-#include <string>
-#include <vector>
-#include <optional>
-#include <ranges>
+#include <algorithm> // For std::find, std::distance
+#include <string>    // For std::string
 
-#include "exchange.h"
-#include "orderbook.h"
-#include "semantic_types.h"
-#include "constants.h"
-#include "engine_constants.h"
+import orderbook;
 
-// Simplified result types for compatibility
-using OrderResult = std::optional<ExchangeId>;
+namespace orderbook {
 
 // C++26: Modern test utilities with smart pointers
 template <typename TListener>
@@ -21,48 +13,48 @@ class TestExchange : public Exchange<TListener> {
 public:
     explicit TestExchange(TListener& listener) : Exchange<TListener>(listener) {}
     
-    // Simplified API for testing with default instrument
-    OrderResult placeBuyOrder(SessionIdView sessionId, Price price, Quantity quantity, OrderIdStrView orderId = "") {
-        return Exchange::placeBuyOrder(sessionId, kDefaultInstrument, price, quantity, orderId);
+    // Simplified API for testing with default instrument (using OrderResult from module) // Renamed to camelCase
+    OrderInsertResult placeBuyOrder(SessionIdView sessionId, Price price, Quantity quantity, OrderIdStrView orderId = "") {
+        return Exchange<TListener>::placeBuyOrder(sessionId, orderbook::kDefaultInstrument, price, quantity, orderId);
     }
     
-    OrderResult placeSellOrder(SessionIdView sessionId, Price price, Quantity quantity, OrderIdStrView orderId = "") {
-        return Exchange::placeSellOrder(sessionId, kDefaultInstrument, price, quantity, orderId);
+    OrderInsertResult placeSellOrder(SessionIdView sessionId, Price price, Quantity quantity, OrderIdStrView orderId = "") {
+        return Exchange<TListener>::placeSellOrder(sessionId, orderbook::kDefaultInstrument, price, quantity, orderId);
     }
     
-    OrderResult placeMarketBuyOrder(SessionIdView sessionId, Quantity quantity, OrderIdStrView orderId = "") {
-        return placeBuyOrder(sessionId, Price(kMarketBuyPrice), quantity, orderId);
+    OrderInsertResult placeMarketBuyOrder(SessionIdView sessionId, Quantity quantity, OrderIdStrView orderId = "") {
+        return placeBuyOrder(sessionId, Price(orderbook::kMarketBuyPrice), quantity, orderId);
     }
     
-    OrderResult placeMarketSellOrder(SessionIdView sessionId, Quantity quantity, OrderIdStrView orderId = "") {
-        return Exchange::placeMarketSellOrder(sessionId, kDefaultInstrument, quantity, orderId);
+    OrderInsertResult placeMarketSellOrder(SessionIdView sessionId, Quantity quantity, OrderIdStrView orderId = "") {
+        return Exchange<TListener>::placeMarketSellOrder(sessionId, orderbook::kDefaultInstrument, quantity, orderId);
     }
-    
+
     // API Overloads for legacy test compatibility
-    OrderResult placeBuyOrder(Price price, Quantity quantity, OrderIdStrView orderId = "") {
-        return placeBuyOrder(EngineConstants::kTestSessionId, price, quantity, orderId);
+    OrderInsertResult placeBuyOrder(Price price, Quantity quantity, OrderIdStrView orderId = "") {
+        return placeBuyOrder(orderbook::EngineConstants::kTestSessionId, price, quantity, orderId);
     }
-    OrderResult placeSellOrder(Price price, Quantity quantity, OrderIdStrView orderId = "") {
-        return placeSellOrder(EngineConstants::kTestSessionId, price, quantity, orderId);
+    OrderInsertResult placeSellOrder(Price price, Quantity quantity, OrderIdStrView orderId = "") {
+        return placeSellOrder(orderbook::EngineConstants::kTestSessionId, price, quantity, orderId);
     }
-    OrderResult placeMarketBuyOrder(Quantity quantity, OrderIdStrView orderId = "") {
-        return placeMarketBuyOrder(EngineConstants::kTestSessionId, quantity, orderId);
+    OrderInsertResult placeMarketBuyOrder(Quantity quantity, OrderIdStrView orderId = "") {
+        return placeMarketBuyOrder(orderbook::EngineConstants::kTestSessionId, quantity, orderId);
     }
-    OrderResult placeMarketSellOrder(Quantity quantity, OrderIdStrView orderId = "") {
-        return placeMarketSellOrder(EngineConstants::kTestSessionId, quantity, orderId);
+    OrderInsertResult placeMarketSellOrder(Quantity quantity, OrderIdStrView orderId = "") {
+        return placeMarketSellOrder(orderbook::EngineConstants::kTestSessionId, quantity, orderId);
     }
 
     // Verification Helpers
-    int bidCount() const { return static_cast<int>(Exchange<TListener>::getBook(kDefaultInstrument).value().m_bids.size()); }
-    int askCount() const { return static_cast<int>(Exchange<TListener>::getBook(kDefaultInstrument).value().m_asks.size()); }
+    ObjectCount bidCount() const { return Exchange<TListener>::getBook(orderbook::kDefaultInstrument).value().m_bids.size(); }
+    ObjectCount askCount() const { return Exchange<TListener>::getBook(orderbook::kDefaultInstrument).value().m_asks.size(); }
     
-    int bidIndex(ExchangeId id) const {
-        auto ids = Exchange<TListener>::getBook(kDefaultInstrument).value().m_bidOrderIds;
+    int64_t bidIndex(ExchangeId id) const {
+        auto ids = Exchange<TListener>::getBook(orderbook::kDefaultInstrument).value().m_bidOrderIds;
         auto it = std::find(ids.begin(), ids.end(), id);
         return it == ids.end() ? -1 : static_cast<int>(std::distance(ids.begin(), it));
     }
     
-    int askIndex(ExchangeId id) const {
+    int64_t askIndex(ExchangeId id) const {
         auto ids = Exchange<TListener>::getBook(kDefaultInstrument).value().m_askOrderIds;
         auto it = std::find(ids.begin(), ids.end(), id);
         return it == ids.end() ? -1 : static_cast<int>(std::distance(ids.begin(), it));
@@ -76,7 +68,7 @@ public:
     
     auto getOrdersBySession(SessionIdView sessionId) const {
         return getAllOrders()
-            | std::views::filter([sessionId](const auto& order) { return order->sessionId() == sessionId; });
+            | std::views::filter([sessionId](const auto& order) { return order->sessionId() == sessionId; }); // Renamed to camelCase
     }
 };
 
@@ -85,7 +77,7 @@ class TestOrder : public Order {
 public:
     // C++26: Factory methods returning smart pointers
     static std::shared_ptr<TestOrder> createOrder(ExchangeId id, Price price, Quantity quantity, Order::Side side) {
-        using Allocator = orderbook::MemoryPoolAllocator<TestOrder, orderbook::OrderPool>;
+        using Allocator = MemoryPoolAllocator<TestOrder, OrderPool>;
         return std::allocate_shared<TestOrder>(Allocator{}, id, price, quantity, side);
     }
     
@@ -97,19 +89,19 @@ public:
         Order::Side side,
         ExchangeId exchange_id
     ) {
-        using Allocator = orderbook::MemoryPoolAllocator<TestOrder, orderbook::OrderPool>;
-        return std::allocate_shared<TestOrder>(Allocator{}, sessionId, orderId, price, quantity, side, exchange_id);
+        using Allocator = MemoryPoolAllocator<TestOrder, OrderPool>;
+        return std::allocate_shared<TestOrder>(Allocator{}, sessionId, orderId, orderbook::kDefaultInstrument, price, quantity, side, exchange_id);
     }
 
     // Factory method for legacy benchmarks (4 arguments)
     static std::shared_ptr<TestOrder> create(ExchangeId id, Price price, Quantity quantity, Order::Side side) {
-        using Allocator = orderbook::MemoryPoolAllocator<TestOrder, orderbook::OrderPool>;
-        return std::allocate_shared<TestOrder>(Allocator{}, id, price, quantity, side);
+        using Allocator = MemoryPoolAllocator<TestOrder, OrderPool>;
+        return std::allocate_shared<TestOrder>(Allocator{}, orderbook::EngineConstants::kTestSessionId, "", orderbook::kDefaultInstrument, price, quantity, side, id);
     }
     
     // Legacy constructors for compatibility
     TestOrder(ExchangeId id, Price price, Quantity quantity, Order::Side side) // Renamed to camelCase
-        : Order(EngineConstants::kTestSessionId, "", kDefaultInstrument, price, quantity, side, id) {
+        : Order(orderbook::EngineConstants::kTestSessionId, "", orderbook::kDefaultInstrument, price, quantity, side, id) {
             // Avoid std::to_string heap allocation; Order constructor handles numeric ID if string is empty
             this->m_orderIdNum = id; 
         }
@@ -120,7 +112,7 @@ public:
         Price price,
         Quantity quantity,
         Order::Side side
-    ) : Order("session", orderId, kDefaultInstrument, price, quantity, side, id) {} // Renamed to kPascalCase
+    ) : Order(orderbook::EngineConstants::kTestSessionId, orderId, orderbook::kDefaultInstrument, price, quantity, side, id) {}
     
     TestOrder( // Renamed to camelCase
         SessionIdView sessionId,
@@ -129,20 +121,20 @@ public:
         Quantity quantity,
         Order::Side side,
         ExchangeId exchange_id
-    ) : Order(sessionId, orderId, kDefaultInstrument, price, quantity, side, exchange_id) {} // Renamed to kPascalCase
+    ) : Order(sessionId, orderId, orderbook::kDefaultInstrument, price, quantity, side, exchange_id) {}
 };
 
 // C++26: Modern test utilities
 namespace TestUtils {
     // Create a test order book with smart pointers
     template <typename TListener>
-    inline std::unique_ptr<OrderBook<TListener>> createTestOrderBook(TListener& listener) {
-        return std::make_unique<OrderBook<TListener>>(kDefaultInstrument, listener);
+    inline std::unique_ptr<OrderBook<TListener>> createTestOrderBook(TListener& listener) { // Renamed to camelCase
+        return std::make_unique<OrderBook<TListener>>(orderbook::kDefaultInstrument, listener);
     }
     
     // Helper to validate order book state
     inline bool validateOrderBook(const OrderBook& book) {
-        auto bookSnapshot = book.getBook(); // Renamed to camelCase
+        auto bookSnapshot = book.getBook();
         return !bookSnapshot.m_bids.empty() || !bookSnapshot.m_asks.empty(); // Renamed to m_snake_case
     }
     
@@ -155,4 +147,6 @@ namespace TestUtils {
 }
 
 // C++20: Constants for testing
-inline const std::string kDummyInstrument = kDefaultInstrument; // Renamed to kPascalCase
+inline const std::string kDummyInstrument = orderbook::kDefaultInstrument; // Renamed to kPascalCase
+
+} // namespace orderbook

@@ -7,24 +7,22 @@
  * error handling strategies for OrderBook::insertOrder operations.
  */
 
-#include <string>
+#include <atomic>     // For std::atomic
+#include <chrono>     // For std::chrono
+#include <expected>   // For std::expected
+#include <format>     // For std::format
 #include <functional>
-#include <chrono>
-#include <atomic>
+#include <iostream>   // For std::cerr
+#include <optional>   // For std::optional
+#include <sstream>    // For std::stringstream
 #include <source_location>
-#include <iostream>
+#include <stdexcept>  // For std::runtime_error
+#include <string>     // For std::string
+#include <string_view> // For std::string_view
 #include <thread>
-#include <optional>
-#include <sstream>
-#include <format>
-#include <variant>
-#include <string_view>
-#include <stdexcept>
-
-#include "engine_constants.h"
-#include "constants.h"
-
-#define HAS_CPP23 (__cplusplus > 202002L || (defined(_MSVC_LANG) && _MSVC_LANG > 202002L))
+#include <variant>    // For std::variant
+import orderbook.semantic_types;
+import orderbook.constants;
 
 namespace orderbook {
 
@@ -89,58 +87,8 @@ inline Unexpected<E> unexpected(E e) {
     return Unexpected<E>(std::move(e));
 }
 
-/**
- * C++20 Implementation of an Expected-like Result type.
- * Mimics C++23 std::expected to allow modern error handling in C++20.
- */
-template<typename T, typename E>
-class InsertResult {
-    std::variant<T, E> m_data;
-    bool m_hasValue;
-
-public:
-    InsertResult(T val) : m_data(std::move(val)), m_hasValue(true) {}
-    InsertResult(E err) : m_data(std::move(err)), m_hasValue(false) {}
-
-    // Mimic C++23 std::expected construction from std::unexpected
-    InsertResult(const Unexpected<E>& unexp) : m_data(unexp.error), m_hasValue(false) {}
-    InsertResult(Unexpected<E>&& unexp) : m_data(std::move(unexp.error)), m_hasValue(false) {}
-
-    [[nodiscard]] bool has_value() const noexcept { return m_hasValue; }
-    [[nodiscard]] explicit operator bool() const noexcept { return m_hasValue; }
-    
-    [[nodiscard]] const T& value() const {
-        if (!m_hasValue) throw std::bad_variant_access();
-        return std::get<T>(m_data);
-    }
-
-    [[nodiscard]] const E& error() const {
-        if (m_hasValue) throw std::bad_variant_access();
-        return std::get<E>(m_data);
-    }
-
-    // Support for C++23-style "unexpected" construction
-    static InsertResult unexpected(E err) { return InsertResult(std::move(err)); }
-};
-
-/**
- * Specialization for InsertResult to support implicit conversion from Unexpected
- */
-namespace detail {
-    template<typename T, typename E>
-    struct ResultTraits {
-        using Type = InsertResult<T, E>;
-    };
-}
-
-// Re-define Unexpected conversion logic if needed, or simply use the class directly.
-// For simplicity in this refactor, we'll use the aliased names.
-
-/**
- * C++23: Using std::expected for modern error handling
- * Fallback to custom InsertResult for C++20 environments
- */
-using OrderInsertResult = InsertResult<ExchangeId, ErrorContext>;
+using OrderInsertResult = std::expected<ExchangeId, ErrorContext>;
+using InsertResultContext = std::expected<void, ErrorContext>;
 
 // ====================================================================
 // Error Handling Strategies
@@ -207,7 +155,7 @@ public:
 
     // Main handle method
     template<typename T>
-    InsertResult<T, ErrorContext> handle(const ErrorContext& ctx) const {
+    std::expected<T, ErrorContext> handle(const ErrorContext& ctx) const {
         // Always log first
         if (logger_) {
             logger_(ctx);
@@ -221,10 +169,10 @@ public:
         // Execute strategy
         switch (m_config.primary_strategy) {
             case ErrorStrategy::LogAndContinue:
-                return InsertResult<T, ErrorContext>(ctx);
+                return std::unexpected(ctx);
                 
             case ErrorStrategy::LogAndRetry:
-                return InsertResult<T, ErrorContext>(ctx); // Caller must handle retry
+                return std::unexpected(ctx); // Caller must handle retry
                 
             case ErrorStrategy::ThrowException:
                 throw std::runtime_error(ctx.toString());
@@ -236,16 +184,16 @@ public:
                 if (m_config.custom_handler) {
                     m_config.custom_handler(ctx);
                 }
-                return InsertResult<T, ErrorContext>(ctx);
+                return std::unexpected(ctx);
         }
 
-        return InsertResult<T, ErrorContext>(ctx);
+        return std::unexpected(ctx);
     }
 
     // C++20: Retry logic with backoff
     template<typename T, typename Func>
-    InsertResult<T, ErrorContext> executeWithRetry(Func&& operation) {
-        std::optional<InsertResult<T, ErrorContext>> last_result;
+    std::expected<T, ErrorContext> executeWithRetry(Func&& operation) {
+        std::optional<std::expected<T, ErrorContext>> last_result;
         for (int attempt = 0; attempt <= m_config.max_retries; ++attempt) {
             auto result = operation();
             // result is declared here, so it's scope is within the loop.
@@ -331,7 +279,7 @@ public:
             state.m_lastResetTime = now;
         }
         
-        if (++state.m_depth > kMaxRecursionDepth) { // Renamed to kPascalCase
+        if (++state.m_depth > orderbook::kMaxRecursionDepth) { // Renamed to kPascalCase
             --state.m_depth;
             return false;
         }
@@ -351,7 +299,7 @@ public:
     }
 
     [[nodiscard]] static bool isNearLimit() noexcept { // Renamed to camelCase
-        return getThreadState().m_depth >= kWarningThreshold;
+        return getThreadState().m_depth >= orderbook::kWarningThreshold;
     }
 
 private:
@@ -398,13 +346,13 @@ inline OrderInsertResult legacyToModern(std::optional<ExchangeId> legacyResult,
     if (legacyResult.has_value()) {
         return OrderInsertResult(*legacyResult);
     }
-    return OrderInsertResult(ErrorContext(InsertError::InternalError, ::EngineConstants::kLegacyNulloptResult, loc));
+    return std::unexpected(ErrorContext(InsertError::InternalError, orderbook::EngineConstants::kLegacyNulloptResult, loc));
 }
 
 } // namespace orderbook
 
 // Using declarations for convenience
-using orderbook::OrderInsertResult; // Renamed to camelCase
+using orderbook::OrderInsertResult;
 using orderbook::InsertError;
 using orderbook::ErrorContext;
 using orderbook::InsertErrorHandler;

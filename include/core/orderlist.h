@@ -1,18 +1,25 @@
 #pragma once
 #include <stdexcept>
 #include <memory>
-#include "order.h"
+#include "order.h" // Ensure order.h is included
+import orderbook.semantic_types; // For F
+// TODO add forward_iterator support so that friend class in not needed // Renamed to camelCase
+namespace orderbook {
 
-// TODO add forward_iterator support so that friend class in not needed
 class OrderList {
-friend class OrderBook;
+template <typename TListener> friend class OrderBook;
 private: // Internal state
     std::shared_ptr<Order> m_head = nullptr; // Head of the linked list of orders
     std::shared_ptr<Order> m_tail = nullptr; // Tail of the linked list of orders
-    F m_price;
+    orderbook::F m_price;
+    Quantity m_totalQuantity{0};
 public:
     OrderList(F price) : m_price(price) {}
     const F& price() const { return m_price; }
+
+    Quantity totalQuantity() const noexcept {
+        return m_totalQuantity;
+    }
     
     struct Iterator 
     {
@@ -49,6 +56,7 @@ public:
         if (!order) return;
         
         order->m_onList = true;
+        m_totalQuantity += order->remainingQuantity();
         
         if (m_head == nullptr) {
             m_head = order;
@@ -68,6 +76,7 @@ public:
         }
         
         order->m_onList = false;
+        m_totalQuantity -= order->remainingQuantity();
         
         auto prev = order->m_prevList.lock();
         auto next = order->m_nextList;
@@ -101,3 +110,5 @@ public:
         return Iterator(nullptr);
     }
 };
+
+} // namespace orderbook

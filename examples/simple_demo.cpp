@@ -1,10 +1,13 @@
-#include "core/exchange.h"
-#include <iostream>
-#include <memory>
-#include <vector>
-#include <chrono>
-#include <iomanip>
-#include "core/exchange.h" // For ExchangeListener
+// Переход на импорт модуля
+#include <algorithm> // For std::min
+#include <chrono>    // For std::chrono
+#include <iostream>  // For std::cout, std::endl
+#include <string>    // For std::string, std::to_string
+#include <vector>    // For std::vector
+
+import orderbook;
+
+using namespace orderbook;
 
 struct SimpleDemoListener : ExchangeListener {
     // Empty listener for demo purposes
@@ -43,35 +46,35 @@ private:
         std::cout << "✅ Exchange created with smart pointer architecture" << std::endl;
         
         // Place buy orders
-        auto buy1 = exchange.buy("session1", "AAPL", 150.25, 100, "buy1");
-        auto buy2 = exchange.buy("session2", "AAPL", 150.20, 50, "buy2");
+        auto buy1 = exchange.placeBuyOrder("session1", "AAPL", Price(150.25), Quantity(100), "buy1");
+        auto buy2 = exchange.placeBuyOrder("session2", "AAPL", Price(150.20), Quantity(50), "buy2");
         
-        if (buy1.has_value() && buy2.has_value()) {
+        if (buy1 && buy2) {
             std::cout << "✅ Buy orders placed successfully" << std::endl;
             std::cout << "   Buy1 ID: " << buy1.value() << std::endl;
             std::cout << "   Buy2 ID: " << buy2.value() << std::endl;
         }
         
         // Place sell orders
-        auto sell1 = exchange.sell("session3", "AAPL", 150.30, 75, "sell1");
-        auto sell2 = exchange.sell("session4", "AAPL", 150.35, 25, "sell2");
+        auto sell1 = exchange.placeSellOrder("session3", "AAPL", orderbook::Price(150.30), orderbook::Quantity(75), "sell1");
+        auto sell2 = exchange.placeSellOrder("session4", "AAPL", orderbook::Price(150.35), orderbook::Quantity(25), "sell2");
         
-        if (sell1.has_value() && sell2.has_value()) {
+        if (sell1 && sell2) {
             std::cout << "✅ Sell orders placed successfully" << std::endl;
             std::cout << "   Sell1 ID: " << sell1.value() << std::endl;
             std::cout << "   Sell2 ID: " << sell2.value() << std::endl;
         }
         
         // Check order book
-        auto book = exchange.book("AAPL");
-        if (book.has_value()) {
-            std::cout << "✅ Order book retrieved with " 
-                      << book.value().bids.size() << " bid levels and " 
-                      << book.value().asks.size() << " ask levels" << std::endl;
+        auto book = exchange.getBook("AAPL");
+        if (book) {
+            std::cout << "✅ Order book retrieved with " // Renamed to camelCase
+                      << book.value().m_bids.size() << " bid levels and " 
+                      << book.value().m_asks.size() << " ask levels" << std::endl;
         }
         
         // Cancel an order
-        if (exchange.cancel(buy1.value(), "session1")) {
+        if (exchange.cancelOrder(buy1.value(), "session1")) {
             std::cout << "✅ Order cancelled successfully" << std::endl;
         }
         
@@ -90,11 +93,11 @@ private:
         auto start = std::chrono::high_resolution_clock::now();
         
         // Create many orders rapidly
-        std::vector<long> order_ids;
+        std::vector<ExchangeId> order_ids;
         order_ids.reserve(num_orders);
         
         for (int i = 0; i < num_orders; i++) {
-            auto result = exchange.buy("perf_test", "MSFT", 300.0 + (i % 100) * 0.01, 10, "perf_" + std::to_string(i));
+            auto result = exchange.placeBuyOrder("perf_test", "MSFT", Price(300.0 + (i % 100) * 0.01), Quantity(10), "perf_" + std::to_string(i));
             if (result.has_value()) {
                 order_ids.push_back(result.value());
             }
@@ -136,7 +139,7 @@ private:
         Exchange<SimpleDemoListener> exchange(listener);
         
         // Test invalid order cancellation
-        bool cancel_result = exchange.cancel(99999, "invalid_session");
+        bool cancel_result = exchange.cancelOrder(ExchangeId(99999), "invalid_session");
         std::cout << "✅ Invalid order cancellation handled: " << (cancel_result ? "FAILED" : "CORRECT") << std::endl;
         
         // Test order retrieval for non-existent order
@@ -144,7 +147,7 @@ private:
         std::cout << "✅ Non-existent order retrieval handled: " << (order.has_value() ? "FAILED" : "CORRECT") << std::endl;
         
         // Test book retrieval for non-existent instrument
-        auto book = exchange.book("NONEXISTENT");
+        auto book = exchange.getBook("NONEXISTENT");
         std::cout << "✅ Non-existent instrument book handled: " << (book.has_value() ? "FAILED" : "CORRECT") << std::endl;
         
         std::cout << "✅ All error handling scenarios working correctly" << std::endl;

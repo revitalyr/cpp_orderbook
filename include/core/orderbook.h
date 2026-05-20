@@ -1,23 +1,45 @@
 #pragma once
 
-#include <list>
-#include <vector>
-#include <map>
-#include <list>
-#include <iostream>
-#include <memory>
-#include <stdexcept>
-#include <source_location>
+#include <chrono>        // For std::chrono::system_clock::now()
+#include <format>        // For std::format
+#include <iostream>      // For std::ostream
+#include <list>          // For std::list
+#include <map>           // For std::map
+#include <memory>        // For std::shared_ptr, std::weak_ptr
+#include <ranges>        // For std::views::transform
+#include <source_location> // For std::source_location
+#include <stdexcept>     // For std::invalid_argument, std::runtime_error
+#include <string>        // For std::string
+#include <vector>        // For std::vector
 
-#include "order.h"
 #include "spinlock.h"
 #include "pricelevels.h"
 #include "insert_result.h"
-#include "semantic_types.h"
-#include "constants.h"
+import orderbook.semantic_types;
+import orderbook.constants;
+
+ #include "safety/production_safety.h" // Moved after module imports
+namespace orderbook {
+
+/**
+ * @brief Interface for receiving asynchronous trade and order events.
+ */
+struct ExchangeListener {
+    /** @brief Triggered whenever an order state changes (insertion, cancellation, etc.) */
+    virtual void onOrder(const Order& ) {}
+    /** @brief Triggered when a match occurs between a bid and an ask */
+    virtual void onTrade(const struct Trade& ) {}
+};
+
+// C++20 Concept to validate the listener interface at compile time
+template <typename T>
+concept Listener = requires(T listener, const struct Order& order, const struct Trade& trade) {
+    { listener.onOrder(order) } -> std::same_as<void>;
+    { listener.onTrade(trade) } -> std::same_as<void>; // Renamed to camelCase
+};
 
 struct Trade {
-    friend class OrderBook;
+    template <typename TListener> friend class OrderBook;
 private:
     Trade(Price price, Quantity quantity, const Order& aggressor, const Order& opposite, NanosecondTimestamp ts) 
         : m_price(price), m_quantity(quantity), m_aggressor(aggressor), m_opposite(opposite), execId(ts) {}
@@ -28,14 +50,6 @@ public:
     const Order& m_opposite;
     /** execution timestamp in nanoseconds since epoch */
     const NanosecondTimestamp execId;
-};
-
-typedef void (*TradeReceiver)(Trade);
-
-class OrderBookListener {
-public: // Callbacks for order book events
-    virtual void onOrder(const Order& ) {}
-    virtual void onTrade(const Trade& ) {}
 };
 
 struct BookLevel {
@@ -83,21 +97,24 @@ inline std::ostream& operator<<(std::ostream& os, const SessionQuoteId& id) {
     return os << "[" << id.m_sessionId << ":" << id.m_quoteId << "]";
 }
 
-class Exchange;
+// Forward declaration must be a template to match the actual definition
+template <typename TListener> class Exchange;
 
 /** OrderBook instances are single threaded and must be externally synchronized using mu or lock() */
+template <typename TListener>
+    requires Listener<TListener>
 class OrderBook {
 private: // Internal state and helper methods
     SpinLock m_mu; // Mutex for external synchronization // Renamed to m_snake_case
     PriceLevels m_bids = PriceLevels(false); // Bid price levels (descending) // Renamed to m_snake_case
     PriceLevels m_asks = PriceLevels(true); // Ask price levels (ascending) // Renamed to m_snake_case
-    OrderBookListener& m_listener; // Listener for trade and order events // Renamed to m_snake_case
+    TListener& m_listener; // Listener for trade and order events // Renamed to m_snake_case
     void matchOrders(Order::Side aggressorSide); // Attempts to match orders
     std::map<SessionQuoteId,QuoteOrders> m_quotes; // Map of session/quote ID to active quotes // Renamed to m_snake_case
     
 public: // Public interface
     const std::string m_instrument; // The instrument this order book is for // Renamed to m_snake_case
-    OrderBook(const std::string &instrument, OrderBookListener& listener) : m_listener(listener), m_instrument(instrument) {} // Renamed to m_snake_case
+    OrderBook(const std::string &instrument, TListener& listener) : m_listener(listener), m_instrument(instrument) {} // Renamed to m_snake_case
     ~OrderBook() = default;
 
     // C++20: Modern insertOrder with explicit error handling and stack overflow protection // Renamed to camelCase
@@ -119,44 +136,50 @@ public: // Public interface
     std::vector<std::string> instruments() const {
         return {m_instrument}; // Renamed to m_snake_case
     }
-    Guard lock() { // Provides a lock guard for external synchronization
-        return Guard(m_mu); // Renamed to m_snake_case
+
+    /** @brief Returns a range-based view of the bid side. Lock must be held during iteration. */
+    auto getBidView() const {
+        return m_bids.levels() | std::views::transform([](const OrderList& list) {
+            return BookLevel{list.price(), list.totalQuantity()}; // Теперь O(1)
+        });
     }
-    
-    // Modern factory method for creating orders
-    template<typename OrderType, typename... Args>
-    std::shared_ptr<OrderType> createOrder(Args&&... args) {
-        return std::make_shared<OrderType>(std::forward<Args>(args)...);
+
+    /** @brief Returns a range-based view of the ask side. Lock must be held during iteration. */
+    auto getAskView() const {
+        return m_asks.levels() | std::views::transform([](const OrderList& list) {
+            return BookLevel{list.price(), list.totalQuantity()}; // Теперь O(1)
+        });
     }
 };
 
 // Implementation of templated OrderBook methods
 template <typename TListener>
+    requires Listener<TListener>
 OrderInsertResult OrderBook<TListener>::insertOrder(
     std::shared_ptr<Order> order,
     std::source_location location
 ) {
     // Prevents stack exhaustion during highly recursive matching/callback scenarios
-    ProductionSafety::StackGuard stack_guard;
+    ::ProductionSafety::CriticalGuard stack_guard;
     
     if (!stack_guard.isValid()) {
-        ErrorContext error(InsertError::StackOverflowProtection, ::EngineConstants::kRecursionDepthExceeded, location);
-        error.recursion_depth = StackProtection::currentDepth();
-        return unexpected(error);
+        orderbook::ErrorContext error(orderbook::InsertError::StackOverflowProtection, orderbook::EngineConstants::kRecursionDepthExceeded, location); // Renamed to kPascalCase
+        error.recursion_depth = orderbook::StackProtection::currentDepth();
+        return std::unexpected(error);
     }
     
     if (!order) {
-        return unexpected(ErrorContext(InsertError::NullOrder, ::EngineConstants::kOrderPointerNull, location));
+        return std::unexpected(orderbook::ErrorContext(orderbook::InsertError::NullOrder, orderbook::EngineConstants::kOrderPointerNull, location));
     }
     
     if (order->remainingQuantity() <= 0) {
-        return unexpected(ErrorContext(InsertError::InvalidQuantity, 
-            std::format("{}{}", ::EngineConstants::kInvalidOrderQuantity, order->remainingQuantity()), location));
+        return std::unexpected(orderbook::ErrorContext(orderbook::InsertError::InvalidQuantity, 
+            std::format("{}{}", orderbook::EngineConstants::kInvalidOrderQuantity, order->remainingQuantity()), location));
     }
     
     if (order->isOnList()) {
-        return unexpected(ErrorContext(InsertError::OrderAlreadyExists,
-            std::format("{} ID: {}", ::EngineConstants::kOrderAlreadyOnList, order->m_exchangeId), location));
+        return std::unexpected(orderbook::ErrorContext(orderbook::InsertError::OrderAlreadyExists,
+            std::format("{} ID: {}", orderbook::EngineConstants::kOrderAlreadyOnList, order->m_exchangeId), location));
     }
     
     auto orderList = order->m_side == Order::Side::BUY ? &m_bids : &m_asks;
@@ -172,6 +195,13 @@ OrderInsertResult OrderBook<TListener>::insertOrder(
 }
 
 template <typename TListener>
+    requires Listener<TListener>
+void OrderBook<TListener>::insertOrderLegacy(std::shared_ptr<Order> order) {
+    insertOrder(order);
+}
+
+template <typename TListener>
+    requires Listener<TListener>
 void OrderBook<TListener>::matchOrders(Order::Side aggressorSide) {
     const auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
@@ -188,7 +218,7 @@ void OrderBook<TListener>::matchOrders(Order::Side aggressorSide) {
             std::shared_ptr<Order> aggressor = aggressorSide == Order::Side::BUY ? bid : ask;
             std::shared_ptr<Order> opposite = aggressorSide == Order::Side::BUY ? ask : bid;
 
-            bid->fill(qty,price);
+            bid->fill(qty,price); // Renamed to camelCase
             ask->fill(qty,price);
 
             const Trade trade(price, qty, *aggressor, *opposite, now_ns);
@@ -210,7 +240,7 @@ void OrderBook<TListener>::matchOrders(Order::Side aggressorSide) {
     auto ordersOnSide = aggressorSide == Order::Side::BUY ? &m_bids : &m_asks;
     if (!ordersOnSide->empty()) {
         auto order = ordersOnSide->front();
-        if (order && order->isMarket()) {
+        if (order && order->isMarket()) { // Renamed to camelCase
             order->cancel();
             ordersOnSide->removeOrder(order);
             m_listener.onOrder(*order);
@@ -219,6 +249,7 @@ void OrderBook<TListener>::matchOrders(Order::Side aggressorSide) {
 }
 
 template <typename TListener>
+    requires Listener<TListener>
 QuoteOrders OrderBook<TListener>::getQuotes(SessionIdView sessionId, QuoteIdView quoteId, std::function<QuoteOrders()> createOrders) {
     auto key = SessionQuoteId(std::string(sessionId), quoteId);
     auto it = m_quotes.find(key);
@@ -230,6 +261,7 @@ QuoteOrders OrderBook<TListener>::getQuotes(SessionIdView sessionId, QuoteIdView
 }
 
 template <typename TListener>
+    requires Listener<TListener>
 void OrderBook<TListener>::quote(const QuoteOrders& quotes, Price bidPrice, Quantity bidQuantity, Price askPrice, Quantity askQuantity) {
     auto bid = quotes.m_bid;
     auto ask = quotes.m_ask;
@@ -258,6 +290,7 @@ void OrderBook<TListener>::quote(const QuoteOrders& quotes, Price bidPrice, Quan
 }
 
 template <typename TListener>
+    requires Listener<TListener>
 int OrderBook<TListener>::cancelOrder(std::shared_ptr<Order> order) {
     if (!order) {
         return -1;
@@ -282,6 +315,7 @@ int OrderBook<TListener>::cancelOrder(std::shared_ptr<Order> order) {
 }
 
 template <typename TListener>
+    requires Listener<TListener>
 const Book OrderBook<TListener>::getBook() const {
     Book orderBookSnapshot;
     auto snap = [](const PriceLevels& src, std::vector<BookLevel>& dst, std::vector<ExchangeId>& oids) {
@@ -306,11 +340,12 @@ const Book OrderBook<TListener>::getBook() const {
 }
 
 template <typename TListener>
+    requires Listener<TListener>
 const Order OrderBook<TListener>::getOrder(std::shared_ptr<Order> order) {
     if (!order) {
-        throw std::invalid_argument(std::string(::EngineConstants::kOrderCannotBeNull));
+        throw std::invalid_argument(std::string(orderbook::EngineConstants::kOrderCannotBeNull));
     }
     return *order;
 }
-    }
-};
+
+} // namespace orderbook

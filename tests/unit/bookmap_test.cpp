@@ -1,12 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "core/bookmap.h"
-#include "core/exchange.h" // For ExchangeListener
+import orderbook;
+import orderbook.semantic_types; // For ExchangeListener
 
-static ExchangeListener g_dummyListener;
+using namespace orderbook;
+static orderbook::ExchangeListener g_dummyListener; // Renamed to g_camelCase
 
 TEST_CASE("BookMap basic operations", "[bookmap]") {
-    BookMap<ExchangeListener> bookMap;
+    BookMap<ExchangeListener> bookMap; // Renamed to camelCase
 
     auto orderBook = bookMap.getOrderBook("dummy");
     REQUIRE(orderBook == nullptr);
@@ -14,7 +15,7 @@ TEST_CASE("BookMap basic operations", "[bookmap]") {
     orderBook = bookMap.getOrCreate("dummy", g_dummyListener);
     REQUIRE(orderBook != nullptr);
 
-    orderBook2 = bookMap.getOrCreate("dummy", g_dummyListener);
+    auto orderBook2 = bookMap.getOrCreate("dummy", g_dummyListener); // Renamed to camelCase
     REQUIRE(orderBook == orderBook2);
 
     auto orderBook3 = bookMap.getOrderBook("dummy");
@@ -22,8 +23,8 @@ TEST_CASE("BookMap basic operations", "[bookmap]") {
     REQUIRE(orderBook2 == orderBook3);
 }
 
-TEST_CASE("BookMap instruments", "[bookmap]") {
-    BookMap bookMap; // Renamed to camelCase
+TEST_CASE("BookMap instruments", "[bookmap]") { // Renamed to camelCase
+    BookMap<ExchangeListener> bookMap; // Renamed to camelCase
     
     auto orderBook = bookMap.getOrCreate("dummy", g_dummyListener); // Renamed to camelCase, g_camelCase
     REQUIRE(orderBook != nullptr); // Renamed to camelCase

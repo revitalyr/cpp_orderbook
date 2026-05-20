@@ -1,43 +1,30 @@
 #pragma once
 
-#include <chrono>
-#include <cfloat>
-#include <memory>
-#include <atomic>
-#include <cstdint>
-#include <string>
-#include <charconv>
+#include <atomic>     // For std::atomic
+#include <cfloat>     // For DBL_MAX
+#include <charconv>   // For std::from_chars
+#include <chrono>     // For std::chrono::system_clock
+#include <cstdint>    // For uint8_t
+#include <memory>     // For std::shared_ptr, std::weak_ptr
+#include <string>     // For std::string
 
-#include "fixed.h"
 #include "string_interner.h"
-#include "semantic_types.h"
 #include "memory_pool.h"
+#include "semantic_types.h"
 #include "constants.h"
+
+namespace orderbook {
+/** Helper function for getting current time */
+inline Timestamp epoch() {
+    return std::chrono::system_clock::now();
+}
+ }
 
 // ============================================================================
 // TYPE ALIASES
 // ============================================================================
 
 using StringId = orderbook::StringInterner::StringId;
-using orderbook::StringInterner;
-using orderbook::g_globalStringInterner;
-
-/** Timestamp representing when an order was submitted */
-using SubmissionTime = Timestamp;
-
-/** Helper function for getting current time */
-inline Timestamp CurrentTimestamp() {
-    return std::chrono::system_clock::now();
-}
-
-#define epoch() CurrentTimestamp()
-
-class Exchange;
-class OrderList; // Renamed to PascalCase
-class OrderMap;
-
-struct Order;
-
 /**
  * Memory-optimized Order structure
  * - Uses StringInterner for strings (4 bytes each instead of 32+)
@@ -55,14 +42,16 @@ struct Order;
  * Members are ordered to minimize padding and group frequently accessed hot data.
  * Uses StringInterning to reduce session and instrument IDs to 32-bit integers.
  */
-struct alignas(64) Order {
+namespace orderbook {
+
+struct alignas(64) Order { // Moved into orderbook namespace
 public:
     enum class Side : uint8_t { BUY = 0, SELL = 1 };
 
-    friend class OrderBook;
+    template <typename TListener> friend class OrderBook;
     friend class OrderList;
     friend class OrderMap;
-    friend class Exchange;
+    template <typename TListener> friend class Exchange;
     friend class TestOrder;
     template<typename> friend class PointerPriceLevels;
     template<typename> friend class StructPriceLevels;
@@ -86,7 +75,7 @@ private:
     bool m_onList = false;
 
     std::atomic<Order*> m_nextPtr{nullptr};
-    const SubmissionTime m_timeSubmitted;
+    const orderbook::Timestamp m_timeSubmitted;
     ExchangeId m_orderIdNum = ExchangeId(0);
     Price m_price;
     Price m_averagePrice = Price(0);
@@ -106,7 +95,7 @@ public:
 private:
     void fill(Quantity quantity, Price price) noexcept { 
         m_remaining -= quantity;
-        m_filled += quantity;
+        m_filled += quantity; // Renamed to camelCase
         m_averagePrice = (m_averagePrice * m_cumulativeQuantity + price * quantity) / (m_cumulativeQuantity + quantity);
         m_cumulativeQuantity += quantity;
     }
@@ -114,7 +103,7 @@ private:
     void cancel() noexcept { m_remaining = Quantity(0); }
     
     [[nodiscard]] bool isMarket() const noexcept {
-        return m_price == kMarketBuyPrice || m_price == kMarketSellPrice;
+        return m_price == orderbook::kMarketBuyPrice || m_price == orderbook::kMarketSellPrice;
     }
 
 public:
@@ -122,14 +111,14 @@ public:
     [[nodiscard]] std::string sessionId() const { 
         return std::string(g_globalStringInterner().get(m_sessionId));
     }
-    
+
     [[nodiscard]] std::string orderId() const { 
         if (m_orderId != StringInterner::INVALID_ID) {
             return std::string(g_globalStringInterner().get(m_orderId));
         }
         return std::to_string(m_orderIdNum);
     }
-    
+
     [[nodiscard]] std::string instrument() const { 
         return std::string(g_globalStringInterner().get(m_instrumentId));
     }
@@ -185,20 +174,20 @@ public:
           m_price(price), // Renamed to m_snake_case
           m_remaining(quantity), // Renamed to m_snake_case
           m_quantity(quantity), // Renamed to m_snake_case
-          m_sessionId(g_globalStringInterner().intern(sessionId)), // Renamed to m_snake_case, g_camelCase
-          m_instrumentId(g_globalStringInterner().intern(instrument)), // Renamed to m_snake_case, g_camelCase
+          m_sessionId(orderbook::g_globalStringInterner().intern(sessionId)), // Renamed to m_snake_case, g_camelCase
+          m_instrumentId(orderbook::g_globalStringInterner().intern(instrument)), // Renamed to m_snake_case, g_camelCase
           m_exchangeId(exchangeId), // Renamed to m_snake_case
           m_side(side) // Renamed to m_snake_case
     {
         // C++17 fast non-throwing parsing
         if (!orderId.empty() && std::isdigit(static_cast<unsigned char>(orderId[0]))) {
             auto [ptr, ec] = std::from_chars(orderId.data(), orderId.data() + orderId.size(), m_orderIdNum);
-            if (ec != std::errc()) {
+            if (ec != std::errc()) { // Renamed to camelCase
                 m_orderIdNum = 0;
-                m_orderId = g_globalStringInterner().intern(orderId);
+                m_orderId = orderbook::g_globalStringInterner().intern(orderId);
             }
         } else if (!orderId.empty()) {
-            m_orderId = g_globalStringInterner().intern(orderId); // Renamed to m_snake_case, g_camelCase
+            m_orderId = orderbook::g_globalStringInterner().intern(orderId); // Renamed to m_snake_case, g_camelCase
             m_orderIdNum = 0; // Renamed to m_snake_case
         }
     }
@@ -214,22 +203,21 @@ namespace orderbook {
  */
 class OrderPool {
 public:
-    static MemoryPool<::Order>& instance() {
-        static MemoryPool<::Order> pool;
+    static MemoryPool<Order>& instance() {
+        static MemoryPool<Order> pool;
         return pool;
     }
 
-    static void reserve(size_t n) {
-        instance().reserve(n);
-    }
+    static void reserve(size_t n) { instance().reserve(n); }
 };
+
 } // namespace orderbook
 
 /**
  * Definition of Order::create must come after OrderPool is defined
  * to resolve dependencies and allow sizeof(Order) in the MemoryPool.
  */
-inline std::shared_ptr<Order> Order::create(
+inline std::shared_ptr<Order> orderbook::Order::create(
     SessionIdView sessionId,
     OrderIdStrView orderId,
     InstrumentSymbolView instrument,
@@ -238,7 +226,7 @@ inline std::shared_ptr<Order> Order::create(
     Order::Side side,
     ExchangeId exchangeId
 ) {
-    using Allocator = orderbook::MemoryPoolAllocator<Order, orderbook::OrderPool>;
+    using Allocator = MemoryPoolAllocator<Order, OrderPool>;
     return std::allocate_shared<Order>(Allocator{}, 
         sessionId, orderId, instrument, price, quantity, side, exchangeId);
 }

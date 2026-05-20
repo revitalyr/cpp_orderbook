@@ -1,12 +1,12 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.23)
 project(cpp_orderbook VERSION 2.0.0 LANGUAGES CXX)
 
-# Modern C++ project configuration
+# Modern C++23 project configuration
 cmake_policy(SET CMP0167 NEW)  # FindBoost module policy
 cmake_policy(SET CMP0135 NEW)  # Download toolchain policy
 
 # C++ standard configuration
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -100,14 +100,26 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/cpp_fixed)
 
 # Core library sources
 set(LIB_SOURCES
-    src/orderbook.cpp
-    src/exchange.cpp
     src/production_safety.cpp
-    src/production_safety_inline.cpp
 )
 
 # Modern library configuration
 add_library(orderbook STATIC ${LIB_SOURCES})
+
+# Add C++20 Module Interface Unit
+target_sources(orderbook PUBLIC
+    FILE_SET CXX_MODULES FILES
+    src/semantic_types.cppm
+    src/constants.cppm
+    src/orderbook.cppm
+)
+
+# Set module dependencies explicitly for MSVC
+set_target_properties(orderbook PROPERTIES
+    CXX_STANDARD 23
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+)
 
 # Target-specific configuration
 target_include_directories(orderbook PUBLIC 
@@ -142,6 +154,16 @@ foreach(TEST_SOURCE ${UNIT_TEST_SOURCES})
         PRIVATE Catch2::Catch2WithMain
     )
     
+    # For MSVC, ensure proper C++ standard
+    if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+        target_compile_options(${TEST_NAME} PRIVATE /std:c++latest)
+        set_target_properties(${TEST_NAME} PROPERTIES
+            CXX_STANDARD 23
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF
+        )
+    endif()
+    
     # Suppress warnings for test targets (GCC/Clang only)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
         target_compile_options(${TEST_NAME} PRIVATE -Wno-sign-conversion -Wno-shorten-64-to-32 -Wno-old-style-cast -Wno-unused-parameter)
@@ -162,6 +184,16 @@ foreach(BENCH_SOURCE ${BENCHMARK_TEST_SOURCES})
     target_link_libraries(${BENCH_NAME} 
         PRIVATE orderbook 
     )
+    
+    # For MSVC, ensure proper C++ standard
+    if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+        target_compile_options(${BENCH_NAME} PRIVATE /std:c++latest)
+        set_target_properties(${BENCH_NAME} PROPERTIES
+            CXX_STANDARD 23
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF
+        )
+    endif()
     
     # Suppress warnings for benchmark targets (GCC/Clang only)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
@@ -189,6 +221,16 @@ foreach(INT_SOURCE ${INTEGRATION_TEST_SOURCES})
         PRIVATE Catch2::Catch2WithMain
     )
     
+    # For MSVC, ensure proper C++ standard
+    if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+        target_compile_options(${INT_NAME} PRIVATE /std:c++latest)
+        set_target_properties(${INT_NAME} PROPERTIES
+            CXX_STANDARD 23
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF
+        )
+    endif()
+    
     # Suppress warnings for integration test targets (GCC/Clang only)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
         target_compile_options(${INT_NAME} PRIVATE -Wno-sign-conversion -Wno-shorten-64-to-32 -Wno-old-style-cast -Wno-unused-parameter)
@@ -200,11 +242,43 @@ foreach(INT_SOURCE ${INTEGRATION_TEST_SOURCES})
     )
 endforeach()
 
+# Examples
+file(GLOB EXAMPLE_SOURCES "examples/*.cpp")
+foreach(EXAMPLE_SOURCE ${EXAMPLE_SOURCES})
+    get_filename_component(EXAMPLE_NAME ${EXAMPLE_SOURCE} NAME_WE)
+    
+    add_executable(${EXAMPLE_NAME} ${EXAMPLE_SOURCE})
+    target_link_libraries(${EXAMPLE_NAME} 
+        PRIVATE orderbook
+    )
+    
+    # For MSVC, ensure proper C++ standard
+    if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+        target_compile_options(${EXAMPLE_NAME} PRIVATE /std:c++latest)
+        set_target_properties(${EXAMPLE_NAME} PROPERTIES
+            CXX_STANDARD 23
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF
+        )
+    endif()
+    
+    # Suppress warnings for example targets (GCC/Clang only)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+        target_compile_options(${EXAMPLE_NAME} PRIVATE -Wno-sign-conversion -Wno-shorten-64-to-32 -Wno-old-style-cast -Wno-unused-parameter -Wno-implicit-int-float-conversion)
+    endif()
+    
+    # Add examples to CTest if desired, or just make them buildable
+    # For now, just make them buildable.
+    # add_test(NAME ${EXAMPLE_NAME} COMMAND ${EXAMPLE_NAME}) # Uncomment to add examples as tests
+endforeach()
+
+
 # Modern installation configuration
 include(GNUInstallDirs)
 
 install(TARGETS orderbook
     EXPORT orderbook-targets
+    FILE_SET CXX_MODULES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

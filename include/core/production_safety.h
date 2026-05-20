@@ -1,9 +1,10 @@
 #pragma once
 
-#include <atomic>
-#include <chrono>
-#include <thread>
-#include <stdexcept>
+#include <atomic>    // For std::atomic
+#include <chrono>    // For std::chrono
+#include <stdexcept> // For std::runtime_error
+#include <thread>    // For std::thread
+import orderbook.constants; // For kMaxRecursionDepth, kWarningThreshold, kResetInterval, kCooldownPeriod, kFailureThreshold
 
 /**
  * Modern C++ Production Safety Module
@@ -22,9 +23,6 @@ public:
     
     // Configuration constants
     // kMaxRecursionDepth is defined in constants.h
-    static constexpr int kMaxRecursionDepth = 100;
-    static constexpr int kWarningThreshold = 70;
-
     static constexpr Duration kResetInterval{std::chrono::seconds{1}}; // Renamed to kPascalCase
     static constexpr Duration kCooldownPeriod{std::chrono::seconds{30}};
     static constexpr int kFailureThreshold = 10; // Renamed to kPascalCase
@@ -73,7 +71,7 @@ public:
             state.m_lastResetTime = now; // Renamed to m_snake_case
         }
         
-        if (++state.m_recursionDepth > kMaxRecursionDepth) {
+        if (++state.m_recursionDepth > orderbook::kMaxRecursionDepth) {
             state.m_recursionDepth = 0;  // Reset for recovery // Renamed to m_snake_case
             return false;
         }

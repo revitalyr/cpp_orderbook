@@ -1,38 +1,39 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "core/orderbook.h"
-#include "core/exchange.h" // For ExchangeListener
-#include "core/test.h"
+import orderbook;
+import orderbook.semantic_types; // For ExchangeId, Price, Quantity
 
-TEST_CASE("OrderList basic operations", "[orderlist]") {
-    OrderList orderList(100);
-    REQUIRE(orderList.begin() == orderList.end());
+using namespace orderbook;
 
-    auto order = TestOrder::create(1, 100, 10, Order::Side::BUY);
+TEST_CASE("OrderList basic operations", "[orderlist]") { // Renamed to camelCase
+    OrderList orderList(100); // Renamed to camelCase
+    REQUIRE(orderList.begin() == orderList.end()); // Renamed to camelCase
+
+    auto order = TestOrder::create(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY); // Renamed to camelCase
     orderList.pushBack(order);
 
-    REQUIRE(orderList.begin() != orderList.end());
-    REQUIRE(*(orderList.begin()) == order);
+    REQUIRE(orderList.begin() != orderList.end()); // Renamed to camelCase
+    REQUIRE(*(orderList.begin()) == order); // Renamed to camelCase
 }
 
-TEST_CASE("OrderList iterator", "[orderlist]") {
-    OrderList orderList(100);
-    REQUIRE(orderList.begin() == orderList.end());
+TEST_CASE("OrderList iterator", "[orderlist]") { // Renamed to camelCase
+    OrderList orderList(100); // Renamed to camelCase
+    REQUIRE(orderList.begin() == orderList.end()); // Renamed to camelCase
 
-    auto order = TestOrder::create(1, 100, 10, Order::Side::BUY);
-    orderList.pushBack(order);
+    auto order = TestOrder::create(1, 100, 10, Order::Side::BUY); // Renamed to camelCase
+    orderList.pushBack(order); // Renamed to camelCase
 
-    REQUIRE(orderList.begin() != orderList.end());
-    REQUIRE(*(orderList.begin()) == order);
+    REQUIRE(orderList.begin() != orderList.end()); // Renamed to camelCase
+    REQUIRE(*(orderList.begin()) == order); // Renamed to camelCase
 
-    auto order2 = TestOrder::create(2, 100, 10, Order::Side::BUY);
-    orderList.pushBack(order2);
+    auto order2 = TestOrder::create(2, 100, 10, Order::Side::BUY); // Renamed to camelCase
+    orderList.pushBack(order2); // Renamed to camelCase
+    
+    REQUIRE(*(orderList.begin()) == order); // Renamed to camelCase
 
-    REQUIRE(*(orderList.begin()) == order);
-
-    auto it = orderList.begin();
+    auto it = orderList.begin(); // Renamed to camelCase
     ++it;
-    REQUIRE(*it == order2);
+    REQUIRE(*it == order2); // Renamed to camelCase
     ++it;
-    REQUIRE(it == orderList.end());
+    REQUIRE(it == orderList.end()); // Renamed to camelCase
 }

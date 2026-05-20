@@ -1,25 +1,29 @@
-#define BOOST_TEST_MODULE ordermap_simple
-#include <boost/test/included/unit_test.hpp>
+#include <iostream>
+#include <cassert>
 
-#include "order.h"
-#include "test.h"
+import orderbook;
 
-BOOST_AUTO_TEST_CASE( ordermap_minimal ) {
-    OrderMap map;
+using namespace orderbook;
+
+int main() {
+    OrderMap map; // Renamed to camelCase
     
-    // Test single order to avoid any recursion
-    auto o = new TestOrder(1, 100, 10, Order::BUY);
+    // Test single order to avoid any recursion, using smart pointers
+    auto o = TestOrder::create(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY); // Renamed to camelCase
     
     // Verify initial state
-    BOOST_TEST(map.get(1)==nullptr);
+    assert(map.get(1)==nullptr);
     
     // Add order
     map.add(o);
     
     // Verify order was added
-    BOOST_TEST(map.get(1)==o);
-    BOOST_TEST(map.get(1)->exchangeId == 1);
+    assert(map.get(1)==o);
+    assert(map.get(1)->m_exchangeId == 1);
     
     // Test that get returns null for non-existent order
-    BOOST_TEST(map.get(999)==nullptr);
+    assert(map.get(999)==nullptr);
+
+    std::cout << "OrderMap simple test passed!" << std::endl;
+    return 0;
 }

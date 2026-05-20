@@ -1,11 +1,14 @@
-#pragma once
-
+module;
 #include <chrono>
 #include <cfloat>
 #include <cstddef>
 #include "fixed.h" // For Price type
 
-namespace orderbook {
+export module orderbook.constants;
+
+import orderbook.semantic_types; // Import semantic types as constants might use them
+
+export namespace orderbook {
 
 // ============================================================================
 // BUFFER AND COLLECTION LIMITS
@@ -75,7 +78,7 @@ constexpr size_t kMemoryPoolBlockSize = 4096;
 } // namespace orderbook
 
 // Error Messages
-namespace orderbook::EngineConstants {
+export namespace orderbook::EngineConstants { // Moved into orderbook namespace
 constexpr std::string_view kRecursionDepthExceeded = "Recursion depth limit exceeded in insertOrder";
 constexpr std::string_view kOrderPointerNull = "Order pointer is null";
 constexpr std::string_view kInvalidOrderQuantity = "Invalid order quantity: ";

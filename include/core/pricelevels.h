@@ -1,18 +1,21 @@
 #pragma once
 
-#include <deque>
-#include <map>
-#include <functional>
-#include <memory>
-#include "order.h"
-#include "orderlist.h"
+#include <deque>      // For std::deque
+#include <functional> // For std::function
+#include <map>        // For std::map
+#include <vector>     // For std::vector
+import orderbook.semantic_types;
+import orderbook.order; // Order and OrderList are part of the main orderbook module
+import orderbook.orderlist;
 
 // The purpose of PriceLevels is to allow a compile time indirection to test implementation using different data structures
+
+namespace orderbook {
 
 struct price_compare {
     explicit price_compare(bool ascending) : m_ascending(ascending) {} // Renamed to camelCase
     template<class T, class U>
-    inline bool operator()(const T& t, const U& u) const {
+    inline bool operator()(const T& t, const U& u) const { // Renamed to camelCase
         return (m_ascending) ? t.price() < u : t.price() > u;
     }
     const bool m_ascending;
@@ -21,7 +24,7 @@ struct price_compare {
 struct PriceCompareStruct { // Renamed to PascalCase
     explicit PriceCompareStruct(bool ascending) : m_ascending(ascending) {}
     template<class T, class U>
-    inline bool operator()(const T& t, const U& u) const {
+    inline bool operator()(const T& t, const U& u) const { // Renamed to camelCase
         return (m_ascending) ? t.price() < u : t.price() > u;
     }
     const bool m_ascending;
@@ -30,19 +33,19 @@ struct PriceCompareStruct { // Renamed to PascalCase
 template <typename Container>
 concept ContainerOfPtr = requires(Container c) {
     typename Container::value_type;
-    requires std::same_as<typename Container::value_type, std::shared_ptr<OrderList>>;
+    requires std::same_as<typename Container::value_type, std::shared_ptr<orderbook::OrderList>>;
 };
 
 template <typename Container>
 concept ContainerOfStruct = requires(Container c) {
     typename Container::value_type;
-    requires std::same_as<typename Container::value_type, OrderList>;
+    requires std::same_as<typename Container::value_type, orderbook::OrderList>;
 };
 
 template <typename Container>
 concept MapOfStruct = requires(Container c) {
     typename Container::value_type;
-    requires std::same_as<typename Container::value_type, std::pair<Price,OrderList>>;
+    requires std::same_as<typename Container::value_type, std::pair<Price,orderbook::OrderList>>;
 };
 
 template <typename Container>
@@ -59,7 +62,7 @@ private: // Internal state
 public: // Public interface
     PointerPriceLevels(bool ascending) : m_cmpFn(ascending) {}
     void insertOrder(std::shared_ptr<Order> order) {
-        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn);
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn); // Renamed to camelCase
         std::shared_ptr<OrderList> list;
         if (itr == m_levels.end() || (*itr)->price() != order->price()) {
             list = std::make_shared<OrderList>(order->price());
@@ -70,7 +73,7 @@ public: // Public interface
         list->pushBack(order);
     }
     void removeOrder(std::shared_ptr<Order> order) {
-        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn);
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn); // Renamed to camelCase
         if (itr == m_levels.end() || (*itr)->price() != order->price()) {
             throw std::runtime_error("price level for order does not exist");
         }
@@ -102,7 +105,7 @@ private: // Internal state
 public: // Public interface
     StructPriceLevels(bool ascending) : m_cmpFn(ascending) {}
     void insertOrder(std::shared_ptr<Order> order) {
-        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn);
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn); // Renamed to camelCase
         if (itr == m_levels.end() || itr->price() != order->price()) {
             OrderList list(order->price());
             list.pushBack(order);
@@ -112,7 +115,7 @@ public: // Public interface
         }
     }
     void removeOrder(std::shared_ptr<Order> order) {
-        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn);
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn); // Renamed to camelCase
         if (itr == m_levels.end() || itr->price() != order->price()) {
             throw std::runtime_error("price level for order does not exist");
         }
@@ -155,7 +158,7 @@ private:
 public: // Public interface
     MapPriceLevels(bool ascending) : m_cmpFn(ascending), m_levels(m_cmpFn) {} 
     void insertOrder(std::shared_ptr<Order> order) {
-        auto itr = m_levels.lower_bound(order->price());
+        auto itr = m_levels.lower_bound(order->price()); // Renamed to camelCase
         if (itr == m_levels.end() || itr->first != order->price()) {
             OrderList list(order->price());
             list.pushBack(order);
@@ -165,7 +168,7 @@ public: // Public interface
         }
     }
     void removeOrder(std::shared_ptr<Order> order) { // Renamed to camelCase
-        auto itr = m_levels.lower_bound(order->price());
+        auto itr = m_levels.lower_bound(order->price()); // Renamed to camelCase
         if (itr == m_levels.end() || itr->first != order->price()) {
             throw std::runtime_error("price level for order does not exist");
         }
@@ -200,7 +203,7 @@ private:
 public: // Public interface
     MapPtrPriceLevels(bool ascending) : m_cmpFn(ascending), m_levels(m_cmpFn) {} // Renamed to m_snake_case
     void insertOrder(std::shared_ptr<Order> order) {
-        auto itr = m_levels.lower_bound(order->price());
+        auto itr = m_levels.lower_bound(order->price()); // Renamed to camelCase
         if (itr == m_levels.end() || itr->first != order->price()) {
             auto list = std::make_shared<OrderList>(order->price());
             list->pushBack(order);
@@ -210,7 +213,7 @@ public: // Public interface
         }
     }
     void removeOrder(std::shared_ptr<Order> order) { // Renamed to camelCase
-        auto itr = m_levels.lower_bound(order->price());
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn); // Renamed to camelCase
         if (itr == m_levels.end() || itr->first != order->price()) {
             throw std::runtime_error("price level for order does not exist");
         }
@@ -227,6 +230,7 @@ public: // Public interface
     bool empty() const {
         return m_levels.empty();
     }
+    const MapOfPtr& levels() const { return m_levels; }
     size_t size() const {
         return m_levels.size();
     }
@@ -246,3 +250,5 @@ using StdMapPointerPriceLevels = MapPtrPriceLevels<std::map<Price, std::shared_p
 
 // define the PriceLevels implementation to use
 using PriceLevels = VectorPriceLevels;
+
+} // namespace orderbook

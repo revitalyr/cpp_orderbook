@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 #include <shared_mutex>
-#include <memory>
+#include <memory> // Renamed to camelCase
 #include "constants.h"
 
 namespace orderbook {
@@ -44,7 +44,7 @@ private:
 public:
     StringInterner() {
         m_strings.reserve(kInitialStringInternerCapacity);
-        m_strings.push_back({nullptr, 0, 0}); // INVALID_ID
+        m_strings.push_back({nullptr, 0, 0}); // INVALID_ID // Renamed to kPascalCase
     }
 
     /**
@@ -134,7 +134,7 @@ public:
 /**
  * Global string interner instance
  */
-inline StringInterner& g_globalStringInterner() { // Renamed to g_camelCase
+inline StringInterner& g_globalStringInterner() {
     static StringInterner interner;
     return interner;
 }

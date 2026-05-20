@@ -4,36 +4,21 @@
  */
 #pragma once
 
-#include <string>
-#include <optional>
-#include <ranges>
-#include <memory>
-#include <vector>
+#include <memory>   // For std::shared_ptr
+#include <optional> // For std::optional
+#include <ranges>   // For std::views::as_const
+#include <string>   // For std::string
+#include <vector>   // For std::vector
 
 #include "order.h"
 #include "orderbook.h"
 #include "bookmap.h"
 #include "spinlock.h"
-#include "ordermap.h"
-#include "semantic_types.h"
-#include "constants.h"
-#include "engine_constants.h"
+import orderbook.ordermap; // Assuming ordermap is part of the main module
+import orderbook.semantic_types;
+import orderbook.constants;
 
-/**
- * @brief Interface for receiving asynchronous trade and order events from the Exchange.
- */
-struct ExchangeListener {
-    /** @brief Triggered whenever an order state changes (insertion, cancellation, etc.) */
-    virtual void onOrder(const Order& ) {}
-    /** @brief Triggered when a match occurs between a bid and an ask */
-    virtual void onTrade(const Trade& ) {}
-};
-
-/** @brief Global default listener that performs no actions. */
-inline ExchangeListener g_dummyListener;
-
-using OrderResult = std::optional<ExchangeId>;
-using CancelResult = bool;
+namespace orderbook {
 
 /**
  * @class Exchange
@@ -42,10 +27,14 @@ using CancelResult = bool;
  * Manages a collection of OrderBooks keyed by instrument and maintains a global 
  * map of all active orders for efficient O(1) lookups and cancellations.
  */
-template <typename TListener>
-class Exchange : OrderBookListener { // Exchange still needs to implement OrderBookListener to be passed to OrderBook
+template <typename TListener> // Renamed to camelCase
+class Exchange { // Exchange no longer inherits from OrderBookListener, but still implements its interface
 public:
-    Exchange() : m_listener(g_dummyListener) {}
+    // A default NoOp listener for cases where no specific listener is provided
+    struct NoOpListener : ExchangeListener {};
+
+    // Default constructor uses a static NoOpListener
+    Exchange() : m_listener(s_defaultNoOpListener) {}
     explicit Exchange(TListener& listener) : m_listener(listener) {}
     
     /**
@@ -59,7 +48,7 @@ public:
         Quantity quantity,
         OrderIdStrView orderId = ""
     );
-    
+
     /** @brief Places a market buy order at the highest possible execution priority. */
     OrderResult placeMarketBuyOrder(
         SessionIdView sessionId,
@@ -67,7 +56,7 @@ public:
         Quantity quantity,
         OrderIdStrView orderId = ""
     ) {
-        return placeBuyOrder(sessionId, instrument, Price(kMarketBuyPrice), quantity, orderId);
+        return placeBuyOrder(sessionId, instrument, Price(orderbook::kMarketBuyPrice), quantity, orderId);
     }
     
     /** @brief Places a limit sell order. */
@@ -86,7 +75,7 @@ public:
         Quantity quantity,
         OrderIdStrView orderId = ""
     ) {
-        return placeSellOrder(sessionId, instrument, Price(kMarketSellPrice), quantity, orderId);
+        return placeSellOrder(sessionId, instrument, orderbook::Price(orderbook::kMarketSellPrice), quantity, orderId);
     }
     
     /**
@@ -118,21 +107,21 @@ public:
     
     /** @brief Range-based view of all tracked orders. */
     auto getAllOrders() const {
-        return m_allOrders.all() | std::views::transform([](const std::shared_ptr<const Order>& order) { return order; });
+        return m_allOrders.all() | std::views::as_const;
     }
     
     /** @brief Range-based view of all active instrument symbols. */
     auto getInstruments() const {
-        return m_books.instruments() | std::views::transform([](const InstrumentSymbol& instrument) { return instrument; });
+        return m_books.instruments() | std::views::as_const;
     }
     
     /** @internal Implementation of OrderBookListener interface */
-    void onOrder(const Order& order) override {
+    void onOrder(const Order& order) {
         m_listener.onOrder(order);
     }
     
     /** @internal Implementation of OrderBookListener interface */
-    void onTrade(const Trade& trade) override {
+    void onTrade(const Trade& trade) {
         m_listener.onTrade(trade);
     }
     
@@ -150,7 +139,7 @@ public:
     }
     
 private:
-    BookMap<Exchange<TListener>> m_books; // BookMap needs to be templated on the type of listener OrderBook expects
+    BookMap<Exchange<TListener>> m_books; 
     OrderMap m_allOrders;
     SpinLock m_mu;
     
@@ -166,4 +155,11 @@ private:
     );
     
     TListener& m_listener; // Reference to the external listener
+
+private:
+    static inline NoOpListener s_defaultNoOpListener; // Static instance for default construction
 };
+
+using OrderResult = OrderInsertResult; // Alias for consistency with previous code
+using CancelResult = bool; // Alias for consistency with previous code
+} // namespace orderbook
