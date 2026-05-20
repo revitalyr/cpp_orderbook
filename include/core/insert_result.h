@@ -21,8 +21,8 @@
 #include <string_view> // For std::string_view
 #include <thread>
 #include <variant>    // For std::variant
-import orderbook.semantic_types;
-import orderbook.constants;
+#include "semantic_types.h"
+#include "constants.h"
 
 namespace orderbook {
 
@@ -361,5 +361,4 @@ using orderbook::ErrorStrategy; // Renamed to camelCase
 using orderbook::StackProtection;
 using orderbook::StackGuard;
 using orderbook::legacyToModern;
-using orderbook::InsertResult;
 using orderbook::unexpected;

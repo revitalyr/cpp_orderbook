@@ -3,7 +3,9 @@
 #include <algorithm> // For std::find, std::distance
 #include <string>    // For std::string
 
-import orderbook;
+#include "exchange.h"
+#include "order.h"
+#include "memory_pool.h"
 
 namespace orderbook {
 
@@ -11,6 +13,7 @@ namespace orderbook {
 template <typename TListener>
 class TestExchange : public Exchange<TListener> {
 public:
+    TestExchange() = default;
     explicit TestExchange(TListener& listener) : Exchange<TListener>(listener) {}
     
     // Simplified API for testing with default instrument (using OrderResult from module) // Renamed to camelCase
@@ -62,12 +65,12 @@ public:
 
     // C++26: Modern range-based queries
     auto getOrdersBySide(Order::Side side) const {
-        return getAllOrders() 
+        return this->getAllOrders() 
             | std::views::filter([side](const auto& order) { return order->m_side == side; }); // Renamed to m_snake_case
     }
     
     auto getOrdersBySession(SessionIdView sessionId) const {
-        return getAllOrders()
+        return this->getAllOrders()
             | std::views::filter([sessionId](const auto& order) { return order->sessionId() == sessionId; }); // Renamed to camelCase
     }
 };
@@ -90,13 +93,13 @@ public:
         ExchangeId exchange_id
     ) {
         using Allocator = MemoryPoolAllocator<TestOrder, OrderPool>;
-        return std::allocate_shared<TestOrder>(Allocator{}, sessionId, orderId, orderbook::kDefaultInstrument, price, quantity, side, exchange_id);
+        return std::allocate_shared<TestOrder>(Allocator{}, sessionId, orderId, price, quantity, side, exchange_id);
     }
 
     // Factory method for legacy benchmarks (4 arguments)
     static std::shared_ptr<TestOrder> create(ExchangeId id, Price price, Quantity quantity, Order::Side side) {
         using Allocator = MemoryPoolAllocator<TestOrder, OrderPool>;
-        return std::allocate_shared<TestOrder>(Allocator{}, orderbook::EngineConstants::kTestSessionId, "", orderbook::kDefaultInstrument, price, quantity, side, id);
+        return std::allocate_shared<TestOrder>(Allocator{}, orderbook::EngineConstants::kTestSessionId, "", price, quantity, side, id);
     }
     
     // Legacy constructors for compatibility
@@ -133,7 +136,8 @@ namespace TestUtils {
     }
     
     // Helper to validate order book state
-    inline bool validateOrderBook(const OrderBook& book) {
+    template <typename TListener>
+    inline bool validateOrderBook(const OrderBook<TListener>& book) {
         auto bookSnapshot = book.getBook();
         return !bookSnapshot.m_bids.empty() || !bookSnapshot.m_asks.empty(); // Renamed to m_snake_case
     }

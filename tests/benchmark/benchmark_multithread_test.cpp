@@ -18,6 +18,14 @@ using namespace orderbook;
 
 const std::string dummy_oid = "oid";
 
+// Moved to namespace scope to allow thread_local member
+struct MyExchangeListener : ExchangeListener {
+    static inline thread_local uint64_t tl_tradeCount = 0;
+    void onTrade(const Trade& ) override {
+        tl_tradeCount++;
+    }
+};
+
 void insertOrders(const bool withTrades) {
     static const orderbook::ObjectCount N_THREADS = static_cast<orderbook::ObjectCount>(std::thread::hardware_concurrency());
     static std::array<std::string,16> instruments;
@@ -35,13 +43,7 @@ void insertOrders(const bool withTrades) {
     };
     std::vector<ThreadCounter> counters(N_THREADS);
 
-    // Use thread_local to eliminate atomic contention in the listener
-    struct MyExchangeListener : public orderbook::ExchangeListener {
-        static inline thread_local uint64_t tl_tradeCount = 0;
-        void onTrade(const Trade& ) override {
-            tl_tradeCount++;
-        }
-    } listener;
+    MyExchangeListener listener;
     
     // Note: Since we use thread_local inside the listener, we don't need
     // to worry about the 8 cores fighting over a single atomic variable. // Renamed to camelCase

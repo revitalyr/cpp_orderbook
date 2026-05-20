@@ -1,8 +1,7 @@
 #pragma once
 #include <stdexcept>
 #include <memory>
-#include "order.h" // Ensure order.h is included
-import orderbook.semantic_types; // For F
+#include "order.h"
 // TODO add forward_iterator support so that friend class in not needed // Renamed to camelCase
 namespace orderbook {
 
@@ -15,6 +14,17 @@ private: // Internal state
     Quantity m_totalQuantity{0};
 public:
     OrderList(F price) : m_price(price) {}
+    OrderList(OrderList&&) noexcept = default;
+    OrderList& operator=(OrderList&&) noexcept = default;
+    OrderList(const OrderList&) = delete;
+    OrderList& operator=(const OrderList&) = delete;
+    ~OrderList() {
+        while (m_head) {
+            auto next = m_head->m_nextList;
+            m_head->m_nextList = nullptr;
+            m_head = next;
+        }
+    }
     const F& price() const { return m_price; }
 
     Quantity totalQuantity() const noexcept {

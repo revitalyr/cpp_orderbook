@@ -3,7 +3,7 @@
 #include <thread>
 #include <mutex> // For std::lock_guard
 #include <vector>
-import orderbook;
+#include "core/spinlock.h"
 
 using namespace orderbook;
 

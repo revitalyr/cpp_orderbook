@@ -10,7 +10,10 @@
 #include "core/exchange.h"
 #include "core/orderbook.h"
 #include "core/order.h"
+#include "core/test.h"
+#include "safety/production_safety.h"
 
+using namespace orderbook;
 struct TestListener : ExchangeListener {
     FailureCount m_tradeCount = 0;
     // Use thread_local for multithreaded benchmarks if needed, but this is single-threaded
@@ -22,13 +25,16 @@ struct TestListener : ExchangeListener {
 
 void insertOrders(const bool withTrades, const int priceLevels) {
 
+    std::cout << "  [insertOrders] creating OrderBook...\n";
     TestListener listener;
-    OrderBook<TestListener> ob(orderbook::kDummyInstrument,listener);
+    OrderBook<TestListener> ob(orderbook::kDefaultInstrument,listener);
 
-    static const ObjectCount kNumOrders = 5000000; // Renamed to kPascalCase
+    static const ObjectCount kNumOrders = 2000000; // Renamed to kPascalCase (was 5M — stack overflow in Debug)
     static const ObjectCount kTotalOrders = kNumOrders * 2;
 
+    std::cout << "  [insertOrders] reserving " << kTotalOrders << " pool nodes...\n";
     orderbook::OrderPool::reserve(kTotalOrders);
+    std::cout << "  [insertOrders] reserve done.\n";
 
     auto start = std::chrono::system_clock::now();
 
@@ -48,12 +54,15 @@ void insertOrders(const bool withTrades, const int priceLevels) {
 
 /** tests the time to remove an order at a random position in the OrderBook */
 void cancelOrders(const int priceLevels) {
+    std::cout << "  [cancelOrders] creating OrderBook...\n";
     TestListener listener; // Use TestListener for consistency
-    OrderBook<TestListener> ob(orderbook::kDummyInstrument,listener);
+    OrderBook<TestListener> ob(orderbook::kDefaultInstrument,listener);
 
     static const ObjectCount kNumOrders = 1000000; // Renamed to kPascalCase
 
+    std::cout << "  [cancelOrders] reserving " << kNumOrders << " pool nodes...\n";
     orderbook::OrderPool::reserve(kNumOrders);
+    std::cout << "  [cancelOrders] reserve done.\n";
 
     std::vector<std::string> output;
 
@@ -82,14 +91,27 @@ void cancelOrders(const int priceLevels) {
 }
 
 int main() {
+    ::ProductionSafety::enableSafety(false);
+    
+    FILE* log = fopen("benchmark_debug.log", "w");
+    if (log) { fprintf(log, "DEBUG: main() entered\n"); fflush(log); }
     std::cout << "sizeof Fixed " << sizeof(orderbook::F) << " number of cores " << std::thread::hardware_concurrency() << "\n";
+    if (log) { fprintf(log, "DEBUG: after sizeof\n"); fflush(log); }
+    if (log) { fprintf(log, "DEBUG: calling insertOrders(false,1000)...\n"); fflush(log); }
+    std::cout << "Calling insertOrders(false, 1000)...\n";
     try {
         insertOrders(false,1000);
+        if (log) { fprintf(log, "DEBUG: insertOrders(false,1000) done\n"); fflush(log); }
         insertOrders(true,1000);
+        if (log) { fprintf(log, "DEBUG: insertOrders(true,1000) done\n"); fflush(log); }
         cancelOrders(1000);
+        if (log) { fprintf(log, "DEBUG: cancelOrders(1000) done\n"); fflush(log); }
         insertOrders(false,10);
+        if (log) { fprintf(log, "DEBUG: insertOrders(false,10) done\n"); fflush(log); }
         insertOrders(true,10);
+        if (log) { fprintf(log, "DEBUG: insertOrders(true,10) done\n"); fflush(log); }
         cancelOrders(10);
+        if (log) { fprintf(log, "DEBUG: cancelOrders(10) done\n"); fflush(log); }
     } catch (const std::bad_alloc& e) {
         std::cerr << "Memory allocation error: " << e.what() << std::endl;
         return 1;

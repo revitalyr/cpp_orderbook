@@ -3,7 +3,8 @@
 #include <chrono>
 #include <cfloat>
 #include <cstddef>
-#include "fixed.h" // For Price type
+#include "semantic_types.h" // For Price type
+#include "fixed.h"
 
 namespace orderbook {
 

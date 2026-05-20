@@ -6,9 +6,11 @@
 #include <unordered_map> // For std::unordered_map
 #include <unordered_set> // For std::unordered_set
 #include <vector>      // For std::vector
-import orderbook.order;     // For Order, ExchangeId, InstrumentSymbol
-import orderbook.spinlock;  // For SpinLock
-import orderbook.constants; // For kOrderMapShards, kDefaultOrderMapCapacity
+#include "order.h"
+#include "spinlock.h"
+#include "constants.h"
+
+namespace orderbook {
 
 /**
  * @brief High-performance hash map of exchange ID -> Order
@@ -132,5 +134,4 @@ public:
         }
     }
 };
-
 } // namespace orderbook

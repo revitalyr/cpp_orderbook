@@ -192,6 +192,9 @@ public:
         }
     }
 };
+
+} // namespace orderbook
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
@@ -213,20 +216,16 @@ public:
 
 } // namespace orderbook
 
-/**
- * Definition of Order::create must come after OrderPool is defined
- * to resolve dependencies and allow sizeof(Order) in the MemoryPool.
- */
-inline std::shared_ptr<Order> orderbook::Order::create(
-    SessionIdView sessionId,
-    OrderIdStrView orderId,
-    InstrumentSymbolView instrument,
-    Price price,
-    Quantity quantity,
-    Order::Side side,
-    ExchangeId exchangeId
+inline std::shared_ptr<orderbook::Order> orderbook::Order::create(
+    orderbook::SessionIdView sessionId,
+    orderbook::OrderIdStrView orderId,
+    orderbook::InstrumentSymbolView instrument,
+    orderbook::Price price,
+    orderbook::Quantity quantity,
+    orderbook::Order::Side side,
+    orderbook::ExchangeId exchangeId
 ) {
-    using Allocator = MemoryPoolAllocator<Order, OrderPool>;
-    return std::allocate_shared<Order>(Allocator{}, 
+    using Allocator = orderbook::MemoryPoolAllocator<orderbook::Order, orderbook::OrderPool>;
+    return std::allocate_shared<orderbook::Order>(Allocator{}, 
         sessionId, orderId, instrument, price, quantity, side, exchangeId);
 }

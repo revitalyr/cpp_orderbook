@@ -15,8 +15,8 @@
 #include "spinlock.h"
 #include "pricelevels.h"
 #include "insert_result.h"
-import orderbook.semantic_types;
-import orderbook.constants;
+#include "semantic_types.h"
+#include "constants.h"
 
  #include "safety/production_safety.h" // Moved after module imports
 namespace orderbook {
@@ -102,7 +102,6 @@ template <typename TListener> class Exchange;
 
 /** OrderBook instances are single threaded and must be externally synchronized using mu or lock() */
 template <typename TListener>
-    requires Listener<TListener>
 class OrderBook {
 private: // Internal state and helper methods
     SpinLock m_mu; // Mutex for external synchronization // Renamed to m_snake_case
@@ -154,7 +153,6 @@ public: // Public interface
 
 // Implementation of templated OrderBook methods
 template <typename TListener>
-    requires Listener<TListener>
 OrderInsertResult OrderBook<TListener>::insertOrder(
     std::shared_ptr<Order> order,
     std::source_location location
@@ -195,13 +193,11 @@ OrderInsertResult OrderBook<TListener>::insertOrder(
 }
 
 template <typename TListener>
-    requires Listener<TListener>
 void OrderBook<TListener>::insertOrderLegacy(std::shared_ptr<Order> order) {
     insertOrder(order);
 }
 
 template <typename TListener>
-    requires Listener<TListener>
 void OrderBook<TListener>::matchOrders(Order::Side aggressorSide) {
     const auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
@@ -249,7 +245,6 @@ void OrderBook<TListener>::matchOrders(Order::Side aggressorSide) {
 }
 
 template <typename TListener>
-    requires Listener<TListener>
 QuoteOrders OrderBook<TListener>::getQuotes(SessionIdView sessionId, QuoteIdView quoteId, std::function<QuoteOrders()> createOrders) {
     auto key = SessionQuoteId(std::string(sessionId), quoteId);
     auto it = m_quotes.find(key);
@@ -261,7 +256,6 @@ QuoteOrders OrderBook<TListener>::getQuotes(SessionIdView sessionId, QuoteIdView
 }
 
 template <typename TListener>
-    requires Listener<TListener>
 void OrderBook<TListener>::quote(const QuoteOrders& quotes, Price bidPrice, Quantity bidQuantity, Price askPrice, Quantity askQuantity) {
     auto bid = quotes.m_bid;
     auto ask = quotes.m_ask;
@@ -290,7 +284,6 @@ void OrderBook<TListener>::quote(const QuoteOrders& quotes, Price bidPrice, Quan
 }
 
 template <typename TListener>
-    requires Listener<TListener>
 int OrderBook<TListener>::cancelOrder(std::shared_ptr<Order> order) {
     if (!order) {
         return -1;
@@ -315,7 +308,6 @@ int OrderBook<TListener>::cancelOrder(std::shared_ptr<Order> order) {
 }
 
 template <typename TListener>
-    requires Listener<TListener>
 const Book OrderBook<TListener>::getBook() const {
     Book orderBookSnapshot;
     auto snap = [](const PriceLevels& src, std::vector<BookLevel>& dst, std::vector<ExchangeId>& oids) {
@@ -340,7 +332,6 @@ const Book OrderBook<TListener>::getBook() const {
 }
 
 template <typename TListener>
-    requires Listener<TListener>
 const Order OrderBook<TListener>::getOrder(std::shared_ptr<Order> order) {
     if (!order) {
         throw std::invalid_argument(std::string(orderbook::EngineConstants::kOrderCannotBeNull));

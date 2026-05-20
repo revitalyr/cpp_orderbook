@@ -4,9 +4,8 @@
 #include <functional> // For std::function
 #include <map>        // For std::map
 #include <vector>     // For std::vector
-import orderbook.semantic_types;
-import orderbook.order; // Order and OrderList are part of the main orderbook module
-import orderbook.orderlist;
+#include "order.h"
+#include "orderlist.h"
 
 // The purpose of PriceLevels is to allow a compile time indirection to test implementation using different data structures
 

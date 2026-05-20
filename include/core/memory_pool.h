@@ -169,11 +169,14 @@ struct MemoryPoolAllocator {
 
     [[nodiscard]] T* allocate(std::size_t n) {
         if (n != 1) throw std::bad_array_new_length();
+        auto* node = PoolType::instance().popFree();
+        if (node) [[likely]] return reinterpret_cast<T*>(node);
+        PoolType::instance().reserve(256);
         return reinterpret_cast<T*>(PoolType::instance().popFree());
     }
 
     void deallocate(T* p, std::size_t) noexcept {
-        PoolType::instance().pushFree(reinterpret_cast<typename PoolType::PoolNode*>(p));
+        PoolType::instance().pushFree(reinterpret_cast<decltype(PoolType::instance().popFree())>(p));
     }
 
     bool operator==(const MemoryPoolAllocator&) const = default;

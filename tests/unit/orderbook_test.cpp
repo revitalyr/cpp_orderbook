@@ -5,6 +5,7 @@
 #include "core/orderbook.h"
 #include "core/order.h"
 #include "core/exchange.h"
+#include "core/test.h"
 
 using namespace orderbook;
 

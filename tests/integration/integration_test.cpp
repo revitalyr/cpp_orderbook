@@ -10,6 +10,7 @@
 #include "core/exchange.h"
 #include "core/orderbook.h"
 #include "core/order.h"
+#include "core/test.h"
 
 using namespace orderbook;
 
@@ -314,7 +315,7 @@ TEST_CASE("IntegrationTest PerformanceIntegration", "[integration]") {
     ::ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener; // Renamed to camelCase
-    TestExchange exchange(listener);
+    TestExchange<IntegrationTestListener> exchange(listener);
     
     const int kNumOrders = 10000;
     auto start = std::chrono::high_resolution_clock::now();

@@ -14,11 +14,12 @@
 #include "orderbook.h"
 #include "bookmap.h"
 #include "spinlock.h"
-import orderbook.ordermap; // Assuming ordermap is part of the main module
-import orderbook.semantic_types;
-import orderbook.constants;
+#include "ordermap.h"
 
 namespace orderbook {
+
+using OrderResult = OrderInsertResult; // Alias for consistency with previous code
+using CancelResult = bool; // Alias for consistency with previous code
 
 /**
  * @class Exchange
@@ -47,7 +48,9 @@ public:
         Price price,
         Quantity quantity,
         OrderIdStrView orderId = ""
-    );
+    ) {
+        return insertOrderInternal(sessionId, instrument, price, quantity, Order::Side::BUY, orderId);
+    }
 
     /** @brief Places a market buy order at the highest possible execution priority. */
     OrderResult placeMarketBuyOrder(
@@ -66,7 +69,9 @@ public:
         Price price,
         Quantity quantity,
         OrderIdStrView orderId = ""
-    );
+    ) {
+        return insertOrderInternal(sessionId, instrument, price, quantity, Order::Side::SELL, orderId);
+    }
     
     /** @brief Places a market sell order at the highest possible execution priority. */
     OrderResult placeMarketSellOrder(
@@ -89,7 +94,11 @@ public:
         Price askPrice,
         Quantity askQuantity,
         QuoteIdView quoteId
-    );
+    ) {
+        auto book = m_books.getOrCreate(instrument, *this);
+        auto orders = book->getQuotes(sessionId, quoteId, [&]() { return QuoteOrders{}; });
+        book->quote(orders, bidPrice, bidQuantity, askPrice, askQuantity);
+    }
     
     /**
      * @brief Cancels an existing order.
@@ -97,13 +106,29 @@ public:
      * @param sessionId Validation session ID to ensure ownership.
      * @return True if cancellation was successful.
      */
-    CancelResult cancelOrder(ExchangeId exchangeId, SessionIdView sessionId);
+    CancelResult cancelOrder(ExchangeId exchangeId, SessionIdView sessionId) {
+        auto order = m_allOrders.get(exchangeId);
+        if (!order) return false;
+        auto book = m_books.getOrderBook(InstrumentSymbolView(order->instrument()));
+        if (!book) return false;
+        book->cancelOrder(order);
+        m_allOrders.remove(exchangeId);
+        return true;
+    }
     
     /** @brief Returns a snapshot of the order book for the given instrument. */
-    std::optional<Book> getBook(InstrumentSymbolView instrument) const;
+    std::optional<Book> getBook(InstrumentSymbolView instrument) const {
+        auto book = m_books.getOrderBook(instrument);
+        if (!book) return std::nullopt;
+        return book->getBook();
+    }
     
     /** @brief Retrieves a copy of an order's current state. */
-    std::optional<Order> getOrder(ExchangeId exchangeId) const;
+    std::optional<Order> getOrder(ExchangeId exchangeId) const {
+        auto order = m_allOrders.get(exchangeId);
+        if (!order) return std::nullopt;
+        return *order;
+    }
     
     /** @brief Range-based view of all tracked orders. */
     auto getAllOrders() const {
@@ -143,7 +168,10 @@ private:
     OrderMap m_allOrders;
     SpinLock m_mu;
     
-    ExchangeId nextId();
+    ExchangeId nextId() {
+        static std::atomic<ExchangeId> s_nextId{1};
+        return s_nextId.fetch_add(1, std::memory_order_relaxed);
+    }
     
     OrderResult insertOrderInternal(
         SessionIdView sessionId,
@@ -152,14 +180,20 @@ private:
         Quantity quantity,
         Order::Side side,
         OrderIdStrView orderId
-    );
+    ) {
+        auto id = nextId();
+        auto order = Order::create(sessionId, orderId, instrument, price, quantity, side, id);
+        if (!order) {
+            return std::unexpected(ErrorContext(InsertError::NullOrder, EngineConstants::kOrderCannotBeNull));
+        }
+        m_allOrders.add(order);
+        auto book = m_books.getOrCreate(instrument, *this);
+        return book->insertOrder(order);
+    }
     
     TListener& m_listener; // Reference to the external listener
 
 private:
     static inline NoOpListener s_defaultNoOpListener; // Static instance for default construction
 };
-
-using OrderResult = OrderInsertResult; // Alias for consistency with previous code
-using CancelResult = bool; // Alias for consistency with previous code
 } // namespace orderbook

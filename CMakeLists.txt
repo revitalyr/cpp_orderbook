@@ -98,20 +98,16 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/cpp_fixed)
 
-# Core library sources
-set(LIB_SOURCES
-    src/production_safety.cpp
-)
-
 # Modern library configuration
-add_library(orderbook STATIC ${LIB_SOURCES})
+add_library(orderbook STATIC)
 
-# Add C++20 Module Interface Unit
+# Add C++20 Module Interface Units
 target_sources(orderbook PUBLIC
     FILE_SET CXX_MODULES FILES
     src/semantic_types.cppm
     src/constants.cppm
     src/orderbook.cppm
+    src/core_part.cppm
 )
 
 # Set module dependencies explicitly for MSVC

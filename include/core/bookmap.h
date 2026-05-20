@@ -7,8 +7,8 @@
 #include <string>    // For std::string
 #include <vector>    // For std::vector
 
-import orderbook.orderbook; // For OrderBook, InstrumentSymbolView, ObjectCount
-import orderbook.constants; // For kMaxInstruments
+#include "orderbook.h"
+#include "constants.h"
 
 /** Book is a lock-free map of instrument -> OrderBook */
 namespace orderbook {

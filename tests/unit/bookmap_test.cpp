@@ -1,7 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
-import orderbook;
-import orderbook.semantic_types; // For ExchangeListener
+#include "core/bookmap.h"
+#include "core/orderbook.h"
+#include "core/exchange.h"
 
 using namespace orderbook;
 static orderbook::ExchangeListener g_dummyListener; // Renamed to g_camelCase

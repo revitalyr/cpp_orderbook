@@ -1,7 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-import orderbook;
-import orderbook.semantic_types; // For ExchangeId, Price, Quantity
+#include "core/test.h"
 
 using namespace orderbook;
 

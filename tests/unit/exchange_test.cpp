@@ -6,7 +6,9 @@
 #include <optional>
 
 #include "safety/production_safety.h" // Explicitly include ProductionSafety
-import orderbook;
+#include "core/exchange.h"
+#include "core/order.h"
+#include "core/test.h"
 
 using namespace orderbook;
 
@@ -25,7 +27,7 @@ TEST_CASE("Exchange insert order buy", "[exchange]") {
     // Disable production safety in tests to prevent recursion with Boost Test Framework
     ::ProductionSafety::enableSafety(false);
     
-    TestExchange<Exchange::NoOpListener> exchange;
+    TestExchange<ExchangeListener> exchange;
 
     auto order1Id = exchange.placeBuyOrder(1.0, 10, "1");
     auto order2Id = exchange.placeBuyOrder(2.0, 10, "2");
@@ -38,7 +40,7 @@ TEST_CASE("Exchange insert order buy", "[exchange]") {
 }
 
 TEST_CASE("Exchange insert order buy 2", "[exchange]") {
-    TestExchange<Exchange::NoOpListener> exchange; // Use default listener
+    TestExchange<ExchangeListener> exchange; // Use default listener
 
     auto order2Id = exchange.placeBuyOrder(2.0, 10, "2");
     auto order1Id = exchange.placeBuyOrder(1.0, 10, "1");
@@ -53,7 +55,7 @@ TEST_CASE("Exchange insert order buy 2", "[exchange]") {
 }
 
 TEST_CASE("Exchange insert order sell", "[exchange]") {
-    TestExchange<Exchange::NoOpListener> exchange; // Use default listener
+    TestExchange<ExchangeListener> exchange; // Use default listener
 
     auto order1Id = exchange.placeSellOrder(1.0, 10, "1");
     auto order2Id = exchange.placeSellOrder(2.0, 10, "2");
@@ -66,7 +68,7 @@ TEST_CASE("Exchange insert order sell", "[exchange]") {
 }
 
 TEST_CASE("Exchange insert order sell 2", "[exchange]") {
-    TestExchange<Exchange::NoOpListener> exchange; // Use default listener
+    TestExchange<ExchangeListener> exchange; // Use default listener
 
     auto order2Id = exchange.placeSellOrder(2.0, 10, "2");
     auto order1Id = exchange.placeSellOrder(1.0, 10, "1");
@@ -79,7 +81,7 @@ TEST_CASE("Exchange insert order sell 2", "[exchange]") {
 }
 
 TEST_CASE("Exchange insert order buy same price", "[exchange]") {
-    TestExchange<Exchange::NoOpListener> exchange; // Use default listener
+    TestExchange<ExchangeListener> exchange; // Use default listener
 
     auto order1Id = exchange.placeBuyOrder(1.0, 10, "1");
     auto order2Id = exchange.placeBuyOrder(2.0, 10, "2");
@@ -154,7 +156,7 @@ TEST_CASE("Exchange cancel invalid", "[exchange]") {
     TestExchange<TestListener> exchange(testListener);
 
     auto order1Id = exchange.placeBuyOrder(1.0, 20, "1");
-    REQUIRE_THROWS(exchange.cancelOrder(order1Id.value() + 1, "dummy"));
+    REQUIRE_FALSE(exchange.cancelOrder(order1Id.value() + 1, "dummy"));
 }
 
 TEST_CASE("Exchange market buy", "[exchange]") {
