@@ -22,9 +22,12 @@
 #include <thread>
 #include <variant>    // For std::variant
 #include "semantic_types.h"
-#include "constants.h"
 
 namespace orderbook {
+
+constexpr std::chrono::seconds kResetInterval{60};
+constexpr int kMaxRecursionDepth = 100;
+constexpr int kWarningThreshold = 70;
 
 // Result status codes
 enum class InsertError {
@@ -244,7 +247,7 @@ private:
     void decrementFailureCount() const {
         int expected = m_failureCount.load(std::memory_order_relaxed);
         while (expected > 0) {
-            if (m_failureCount.compare_exchange_weak( // Renamed to m_snake_case
+            if (m_failureCount.compare_exchange_weak(
                     expected, expected - 1,
                     std::memory_order_relaxed, std::memory_order_relaxed)) {
                 break;
@@ -258,11 +261,6 @@ private:
 // ====================================================================
 
 class StackProtection {
-public:
-    // Configuration constants from constants.h
-    // MAX_RECURSION_DEPTH = 100 (or as defined in constants.h)
-    // WARNING_THRESHOLD = 80 (or as defined in constants.h)
-
 private:
     struct ThreadState {
         int m_depth{0};
@@ -279,7 +277,7 @@ public:
             state.m_lastResetTime = now;
         }
         
-        if (++state.m_depth > orderbook::kMaxRecursionDepth) { // Renamed to kPascalCase
+        if (++state.m_depth > orderbook::kMaxRecursionDepth) {
             --state.m_depth;
             return false;
         }
@@ -294,11 +292,11 @@ public:
         }
     }
 
-    [[nodiscard]] static int currentDepth() noexcept { // Renamed to camelCase
+    [[nodiscard]] static int currentDepth() noexcept {
         return getThreadState().m_depth;
     }
 
-    [[nodiscard]] static bool isNearLimit() noexcept { // Renamed to camelCase
+    [[nodiscard]] static bool isNearLimit() noexcept {
         return getThreadState().m_depth >= orderbook::kWarningThreshold;
     }
 
@@ -319,7 +317,7 @@ public:
     }
     // Destructor
     ~StackGuard() noexcept {
-        if (m_success) { // Renamed to m_snake_case
+        if (m_success) {
             StackProtection::exitOperation();
         }
     }
@@ -336,29 +334,4 @@ private:
     bool& m_flagRef;
 };
 
-// ====================================================================
-// Result Utilities
-// ====================================================================
-
-// Helper to convert legacy result to modern result
-inline OrderInsertResult legacyToModern(std::optional<ExchangeId> legacyResult,
-                                         std::source_location loc = std::source_location::current()) {
-    if (legacyResult.has_value()) {
-        return OrderInsertResult(*legacyResult);
-    }
-    return std::unexpected(ErrorContext(InsertError::InternalError, orderbook::EngineConstants::kLegacyNulloptResult, loc));
-}
-
 } // namespace orderbook
-
-// Using declarations for convenience
-using orderbook::OrderInsertResult;
-using orderbook::InsertError;
-using orderbook::ErrorContext;
-using orderbook::InsertErrorHandler;
-using orderbook::StrategyConfig;
-using orderbook::ErrorStrategy; // Renamed to camelCase
-using orderbook::StackProtection;
-using orderbook::StackGuard;
-using orderbook::legacyToModern;
-using orderbook::unexpected;

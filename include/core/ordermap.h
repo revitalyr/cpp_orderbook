@@ -8,18 +8,18 @@
 #include <vector>      // For std::vector
 #include "order.h"
 #include "spinlock.h"
-#include "constants.h"
 
 namespace orderbook {
+
+constexpr size_t kOrderMapShards = 16;
+constexpr size_t kDefaultOrderMapCapacity = 100000;
 
 /**
  * @brief High-performance hash map of exchange ID -> Order
  * Uses unordered_map with shared_mutex for fast concurrent access
  */
 class OrderMap {
-private: // Internal state
-    // Moved into orderbook namespace
-    // using Order = orderbook::Order; // Not needed if Order is in orderbook namespace
+private:
     struct Shard {
         mutable orderbook::SpinLock mutex;
         std::unordered_map<ExchangeId, std::shared_ptr<Order>> map;
@@ -86,7 +86,7 @@ public:
     }
     
     /**
-     * Get all unique instruments // Renamed to camelCase
+     * Get all unique instruments
      */
     std::vector<InstrumentSymbol> instruments() const {
         std::unordered_set<InstrumentSymbol> unique_instruments;
@@ -98,7 +98,7 @@ public:
             }
         }
         
-        return std::vector<InstrumentSymbol>(unique_instruments.begin(), unique_instruments.end()); // Renamed to camelCase
+        return std::vector<InstrumentSymbol>(unique_instruments.begin(), unique_instruments.end());
     }
     
     /**

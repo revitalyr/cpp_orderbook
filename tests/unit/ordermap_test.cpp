@@ -4,17 +4,17 @@
 
 using namespace orderbook;
 TEST_CASE("OrderMap basic operations", "[ordermap]") {
-    OrderMap orderMap; // Renamed to camelCase
+    OrderMap orderMap;
 
-    auto order = TestOrder::create(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY); // Renamed to camelCase
-    REQUIRE(orderMap.get(1) == nullptr); // Renamed to camelCase
+    auto order = TestOrder::createOrder(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY);
+    REQUIRE(orderMap.get(1) == nullptr);
 
-    orderMap.add(order); // Renamed to camelCase
-    REQUIRE(orderMap.get(1) == order); // Renamed to camelCase
+    orderMap.add(order);
+    REQUIRE(orderMap.get(1) == order);
     
     // Test that we can retrieve the order we just added
-    auto retrievedOrder = orderMap.get(1); // Renamed to camelCase
-    REQUIRE(retrievedOrder == order); // Renamed to camelCase
-    REQUIRE(retrievedOrder != nullptr); // Renamed to camelCase
-    REQUIRE(retrievedOrder->m_exchangeId == 1); // Renamed to m_snake_case
+    auto retrievedOrder = orderMap.get(1);
+    REQUIRE(retrievedOrder == order);
+    REQUIRE(retrievedOrder != nullptr);
+    REQUIRE(retrievedOrder->m_exchangeId == 1);
 }

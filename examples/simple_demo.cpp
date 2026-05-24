@@ -5,7 +5,7 @@
 #include <string>    // For std::string, std::to_string
 #include <vector>    // For std::vector
 
-import orderbook;
+#include "core/exchange.h"
 
 using namespace orderbook;
 
@@ -68,7 +68,7 @@ private:
         // Check order book
         auto book = exchange.getBook("AAPL");
         if (book) {
-            std::cout << "✅ Order book retrieved with " // Renamed to camelCase
+            std::cout << "✅ Order book retrieved with "
                       << book.value().m_bids.size() << " bid levels and " 
                       << book.value().m_asks.size() << " ask levels" << std::endl;
         }

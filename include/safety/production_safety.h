@@ -21,25 +21,24 @@ public:
     using Duration = std::chrono::steady_clock::duration;
     
     // Configuration constants
-    // kMaxRecursionDepth is defined in constants.h
     static constexpr int kMaxRecursionDepth = 100;
     static constexpr int kWarningThreshold = 70;
 
-    static constexpr Duration kResetInterval{std::chrono::seconds{1}}; // Renamed to kPascalCase
+    static constexpr Duration kResetInterval{std::chrono::seconds{1}};
     static constexpr Duration kCooldownPeriod{std::chrono::seconds{30}};
-    static constexpr int kFailureThreshold = 10; // Renamed to kPascalCase
+    static constexpr int kFailureThreshold = 10;
 
 private:
     // Thread-local state for recursion tracking
     struct ThreadLocalState {
-        int m_recursionDepth{0}; // Renamed to m_snake_case
-        TimePoint m_lastResetTime{std::chrono::steady_clock::now()}; // Renamed to m_snake_case
+        int m_recursionDepth{0};
+        TimePoint m_lastResetTime{std::chrono::steady_clock::now()};
     };
     
     // Atomic state for circuit breaker
-    static inline std::atomic<bool> s_safetyEnabled{true}; // Renamed to s_snake_case
-    static inline std::atomic<int> s_failureCount{0}; // Renamed to s_snake_case
-    static inline std::atomic<TimePoint> s_lastFailureTime{ // Renamed to s_snake_case
+    static inline std::atomic<bool> s_safetyEnabled{true};
+    static inline std::atomic<int> s_failureCount{0};
+    static inline std::atomic<TimePoint> s_lastFailureTime{
         std::chrono::steady_clock::now()
     };
     
@@ -68,13 +67,13 @@ public:
         const auto now = std::chrono::steady_clock::now();
         
         // Periodic reset to prevent permanent lockout
-        if (now - state.m_lastResetTime > kResetInterval) { // Renamed to m_snake_case, kPascalCase
-            state.m_recursionDepth = 0; // Renamed to m_snake_case
-            state.m_lastResetTime = now; // Renamed to m_snake_case
+        if (now - state.m_lastResetTime > kResetInterval) {
+            state.m_recursionDepth = 0;
+            state.m_lastResetTime = now;
         }
         
         if (++state.m_recursionDepth > kMaxRecursionDepth) {
-            state.m_recursionDepth = 0;  // Reset for recovery // Renamed to m_snake_case
+            state.m_recursionDepth = 0;  // Reset for recovery
             return false;
         }
         return true;
@@ -86,18 +85,18 @@ public:
         }
         
         auto& state = getThreadState();
-        if (state.m_recursionDepth > 0) { // Renamed to m_snake_case
-            --state.m_recursionDepth; // Renamed to m_snake_case
+        if (state.m_recursionDepth > 0) {
+            --state.m_recursionDepth;
         }
     }
 
     // RAII Guard for critical operations
     class CriticalGuard {
     public:
-        CriticalGuard() noexcept : m_isValid(enterCriticalOperation()) {} // Renamed to m_snake_case, camelCase
+        CriticalGuard() noexcept : m_isValid(enterCriticalOperation()) {}
         
         ~CriticalGuard() noexcept {
-            if (m_isValid) { // Renamed to m_snake_case
+            if (m_isValid) {
                 exitCriticalOperation();
             }
         }
@@ -111,7 +110,7 @@ public:
         [[nodiscard]] bool isValid() const noexcept { return m_isValid; }
         
     private:
-        bool m_isValid; // Renamed to m_snake_case
+        bool m_isValid;
     };
 
     // Circuit breaker implementation
@@ -121,11 +120,11 @@ public:
         }
         
         const int failures = s_failureCount.load(std::memory_order_relaxed);
-        if (failures > kFailureThreshold) { // Renamed to kPascalCase
+        if (failures > kFailureThreshold) {
             const auto lastFailure = s_lastFailureTime.load(std::memory_order_relaxed);
             const auto now = std::chrono::steady_clock::now();
             
-            if (now - lastFailure > kCooldownPeriod) { // Renamed to kPascalCase
+            if (now - lastFailure > kCooldownPeriod) {
                 s_failureCount.store(0, std::memory_order_relaxed);
                 return true;
             }

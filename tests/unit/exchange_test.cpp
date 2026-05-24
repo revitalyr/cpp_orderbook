@@ -29,8 +29,8 @@ TEST_CASE("Exchange insert order buy", "[exchange]") {
     
     TestExchange<ExchangeListener> exchange;
 
-    auto order1Id = exchange.placeBuyOrder(1.0, 10, "1");
-    auto order2Id = exchange.placeBuyOrder(2.0, 10, "2");
+    auto order1Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 10, "1");
+    auto order2Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 2.0, 10, "2");
 
     REQUIRE(exchange.bidCount() == 2);
     REQUIRE(exchange.askCount() == 0);
@@ -42,8 +42,8 @@ TEST_CASE("Exchange insert order buy", "[exchange]") {
 TEST_CASE("Exchange insert order buy 2", "[exchange]") {
     TestExchange<ExchangeListener> exchange; // Use default listener
 
-    auto order2Id = exchange.placeBuyOrder(2.0, 10, "2");
-    auto order1Id = exchange.placeBuyOrder(1.0, 10, "1");
+    auto order2Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 2.0, 10, "2");
+    auto order1Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 10, "1");
 
     // should end up with same ordering
 
@@ -57,8 +57,8 @@ TEST_CASE("Exchange insert order buy 2", "[exchange]") {
 TEST_CASE("Exchange insert order sell", "[exchange]") {
     TestExchange<ExchangeListener> exchange; // Use default listener
 
-    auto order1Id = exchange.placeSellOrder(1.0, 10, "1");
-    auto order2Id = exchange.placeSellOrder(2.0, 10, "2");
+    auto order1Id = exchange.placeSellOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 10, "1");
+    auto order2Id = exchange.placeSellOrder(orderbook::EngineConstants::kTestSessionId, 2.0, 10, "2");
 
     REQUIRE(exchange.bidCount() == 0);
     REQUIRE(exchange.askCount() == 2);
@@ -70,8 +70,8 @@ TEST_CASE("Exchange insert order sell", "[exchange]") {
 TEST_CASE("Exchange insert order sell 2", "[exchange]") {
     TestExchange<ExchangeListener> exchange; // Use default listener
 
-    auto order2Id = exchange.placeSellOrder(2.0, 10, "2");
-    auto order1Id = exchange.placeSellOrder(1.0, 10, "1");
+    auto order2Id = exchange.placeSellOrder(orderbook::EngineConstants::kTestSessionId, 2.0, 10, "2");
+    auto order1Id = exchange.placeSellOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 10, "1");
 
     REQUIRE(exchange.bidCount() == 0);
     REQUIRE(exchange.askCount() == 2);
@@ -83,9 +83,9 @@ TEST_CASE("Exchange insert order sell 2", "[exchange]") {
 TEST_CASE("Exchange insert order buy same price", "[exchange]") {
     TestExchange<ExchangeListener> exchange; // Use default listener
 
-    auto order1Id = exchange.placeBuyOrder(1.0, 10, "1");
-    auto order2Id = exchange.placeBuyOrder(2.0, 10, "2");
-    auto order3Id = exchange.placeBuyOrder(2.0, 25, "3");
+    auto order1Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 10, "1");
+    auto order2Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 2.0, 10, "2");
+    auto order3Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 2.0, 25, "3");
 
     REQUIRE(exchange.bidCount() == 2);
     REQUIRE(exchange.getBook(kDefaultInstrument).value().m_bidOrderIds.size() == 3);
@@ -101,11 +101,11 @@ TEST_CASE("Exchange fill order", "[exchange]") {
     
     TestExchange<TestListener> exchange(testListener);
 
-    auto order1Id = exchange.placeBuyOrder(1.0, 10, "1");
+    auto order1Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 10, "1");
 
     REQUIRE(testListener.m_trades.size() == 0);
 
-    auto order2Id = exchange.placeSellOrder(0.75, 10, "2");
+    auto order2Id = exchange.placeSellOrder(orderbook::EngineConstants::kTestSessionId, 0.75, 10, "2");
 
     REQUIRE(testListener.m_trades.size() == 1);
     REQUIRE(testListener.m_trades[0].m_aggressor.m_exchangeId == order2Id.value());
@@ -117,11 +117,11 @@ TEST_CASE("Exchange partial fill", "[exchange]") {
     TestListener testListener;
     TestExchange<TestListener> exchange(testListener);
 
-    auto order1Id = exchange.placeBuyOrder(1.0, 20, "1");
+    auto order1Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 20, "1");
 
     REQUIRE(testListener.m_trades.size() == 0);
 
-    auto order2Id = exchange.placeSellOrder(.75, 10, "2");
+    auto order2Id = exchange.placeSellOrder(orderbook::EngineConstants::kTestSessionId, .75, 10, "2");
 
     REQUIRE(testListener.m_trades.size() == 1);
     REQUIRE(testListener.m_trades[0].m_aggressor.m_exchangeId == order2Id.value());
@@ -141,7 +141,7 @@ TEST_CASE("Exchange cancel order", "[exchange]") {
     
     TestExchange<TestListener> exchange(testListener);
 
-    auto order1Id = exchange.placeBuyOrder(1.0, 20, "1");
+    auto order1Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 20, "1");
     REQUIRE(exchange.cancelOrder(order1Id.value(), "session"));
     REQUIRE_FALSE(exchange.cancelOrder(order1Id.value(), "session"));
 
@@ -155,7 +155,7 @@ TEST_CASE("Exchange cancel invalid", "[exchange]") {
     TestListener testListener;
     TestExchange<TestListener> exchange(testListener);
 
-    auto order1Id = exchange.placeBuyOrder(1.0, 20, "1");
+    auto order1Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 20, "1");
     REQUIRE_FALSE(exchange.cancelOrder(order1Id.value() + 1, "dummy"));
 }
 
@@ -165,8 +165,8 @@ TEST_CASE("Exchange market buy", "[exchange]") {
     
     TestExchange<TestListener> exchange(testListener);
 
-    exchange.placeSellOrder(1.0, 20, "1");
-    exchange.placeMarketBuyOrder(10, "2");
+    exchange.placeSellOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 20, "1");
+    exchange.placeMarketBuyOrder(orderbook::EngineConstants::kTestSessionId, 10, "2");
 
     REQUIRE(testListener.m_orders.size() == 4);
     REQUIRE(testListener.m_trades.size() == 1);
@@ -180,8 +180,8 @@ TEST_CASE("Exchange market buy cancel remaining", "[exchange]") {
     
     TestExchange<TestListener> exchange(testListener);
 
-    exchange.placeSellOrder(1.0, 20, "1");
-    exchange.placeMarketBuyOrder(30, "2");
+    exchange.placeSellOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 20, "1");
+    exchange.placeMarketBuyOrder(orderbook::EngineConstants::kTestSessionId, 30, "2");
 
     REQUIRE(testListener.m_orders.size() == 5);
     REQUIRE(testListener.m_trades.size() == 1);
@@ -195,10 +195,10 @@ TEST_CASE("Exchange market buy multi level", "[exchange]") {
     
     TestExchange<TestListener> exchange(testListener);
 
-    exchange.placeSellOrder(1.0, 20, "1");
-    exchange.placeSellOrder(2.0, 20, "2");
+    exchange.placeSellOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 20, "1");
+    exchange.placeSellOrder(orderbook::EngineConstants::kTestSessionId, 2.0, 20, "2");
 
-    exchange.placeMarketBuyOrder(30, "3");
+    exchange.placeMarketBuyOrder(orderbook::EngineConstants::kTestSessionId, 30, "3");
 
     // initial orders (3) + 2x2 updates due to trades (1 full and 1 partial) = 7 statuses
     REQUIRE(testListener.m_orders.size() == 7);
@@ -215,7 +215,7 @@ TEST_CASE("Exchange market buy one sided", "[exchange]") {
     
     TestExchange<TestListener> exchange(testListener);
 
-    exchange.placeMarketBuyOrder(30, "1");
+    exchange.placeMarketBuyOrder(orderbook::EngineConstants::kTestSessionId, 30, "1");
 
     REQUIRE(testListener.m_orders.size() == 2);
     REQUIRE(testListener.m_trades.size() == 0);
@@ -228,9 +228,9 @@ TEST_CASE("Exchange order immutability", "[exchange]") {
     TestListener testListener;
     TestExchange<TestListener> exchange(testListener);
 
-    auto order1Id = exchange.placeBuyOrder(1.0, 30, "1");
+    auto order1Id = exchange.placeBuyOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 30, "1");
     Order order = exchange.getOrder(order1Id.value()).value();
-    exchange.placeSellOrder(1.0, 10, "2");
+    exchange.placeSellOrder(orderbook::EngineConstants::kTestSessionId, 1.0, 10, "2");
     Order latest = exchange.getOrder(order1Id.value()).value();
 
     REQUIRE(order.remainingQuantity() == 30);

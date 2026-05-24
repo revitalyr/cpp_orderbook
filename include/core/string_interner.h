@@ -6,10 +6,11 @@
 #include <unordered_map>
 #include <vector>
 #include <shared_mutex>
-#include <memory> // Renamed to camelCase
-#include "constants.h"
+#include <memory>
 
 namespace orderbook {
+
+constexpr size_t kInitialStringInternerCapacity = 1024;
 
 /**
  * String interning for frequently used strings.
@@ -44,7 +45,7 @@ private:
 public:
     StringInterner() {
         m_strings.reserve(kInitialStringInternerCapacity);
-        m_strings.push_back({nullptr, 0, 0}); // INVALID_ID // Renamed to kPascalCase
+        m_strings.push_back({nullptr, 0, 0}); // INVALID_ID
     }
 
     /**
@@ -93,14 +94,14 @@ public:
         }
 
         // Insert new string
-        StringId new_id = static_cast<StringId>(m_strings.size()); // Renamed to m_snake_case
+        StringId new_id = static_cast<StringId>(m_strings.size());
         
         auto buffer = std::make_unique<char[]>(sv.length() + 1);
         std::memcpy(buffer.get(), sv.data(), sv.length());
         buffer[sv.length()] = '\0';
         
-        m_strings.push_back({std::move(buffer), sv.length(), hash}); // Renamed to m_snake_case
-        m_hashToIds[hash].push_back(new_id); // Renamed to m_snake_case
+        m_strings.push_back({std::move(buffer), sv.length(), hash});
+        m_hashToIds[hash].push_back(new_id);
         
         tl_cache[hash] = new_id;
         return new_id;
@@ -111,23 +112,23 @@ public:
      * Returns empty string_view for INVALID_ID.
      */
     std::string_view get(StringId id) const {
-        if (id == INVALID_ID || id >= m_strings.size()) { // Renamed to m_snake_case
+        if (id == INVALID_ID || id >= m_strings.size()) {
             return {};
         }
         
-        std::shared_lock lock(m_mutex); // Renamed to m_snake_case
-        const auto& str = m_strings[id]; // Renamed to m_snake_case
+        std::shared_lock lock(m_mutex);
+        const auto& str = m_strings[id];
         return std::string_view(str.data.get(), str.length);
     }
 
     size_t size() const {
-        std::shared_lock lock(m_mutex); // Renamed to m_snake_case
-        return m_strings.size() - 1; // Exclude INVALID_ID // Renamed to m_snake_case
+        std::shared_lock lock(m_mutex);
+        return m_strings.size() - 1; // Exclude INVALID_ID
     }
 
     void reserve(size_t n) {
-        std::unique_lock lock(m_mutex); // Renamed to m_snake_case
-        m_strings.reserve(n + 1); // Renamed to m_snake_case
+        std::unique_lock lock(m_mutex);
+        m_strings.reserve(n + 1);
     }
 };
 

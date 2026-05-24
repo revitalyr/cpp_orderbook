@@ -5,6 +5,9 @@ project(cpp_orderbook VERSION 2.0.0 LANGUAGES CXX)
 cmake_policy(SET CMP0167 NEW)  # FindBoost module policy
 cmake_policy(SET CMP0135 NEW)  # Download toolchain policy
 
+# Find Boost (header-only libraries like intrusive)
+find_package(Boost REQUIRED COMPONENTS intrusive)
+
 # C++ standard configuration
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -123,6 +126,7 @@ target_include_directories(orderbook PUBLIC
     $<INSTALL_INTERFACE:include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/cpp_fixed>
 )
+target_link_libraries(orderbook PUBLIC Boost::intrusive)
 
 # Compiler-specific target options
 if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
@@ -264,8 +268,6 @@ foreach(EXAMPLE_SOURCE ${EXAMPLE_SOURCES})
     endif()
     
     # Add examples to CTest if desired, or just make them buildable
-    # For now, just make them buildable.
-    # add_test(NAME ${EXAMPLE_NAME} COMMAND ${EXAMPLE_NAME}) # Uncomment to add examples as tests
 endforeach()
 
 

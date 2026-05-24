@@ -9,7 +9,7 @@
 #include <thread>    // For std::this_thread::sleep_for, std::thread
 #include <vector>    // For std::vector
 
-import orderbook;
+#include "core/exchange.h"
 
 using namespace orderbook;
 
@@ -66,9 +66,9 @@ private:
         std::cout << "✅ Exchange created with smart pointer architecture" << std::endl;
         
         // Place multiple buy orders
-        std::vector<ExchangeId> buy_ids; // Renamed to camelCase
+        std::vector<ExchangeId> buy_ids;
         for (ObjectCount i = 0; i < 5; i++) {
-            auto result = exchange.placeBuyOrder("session" + std::to_string(i), "AAPL", // Renamed to camelCase
+            auto result = exchange.placeBuyOrder("session" + std::to_string(i), "AAPL",
                                      Price(150.0 - i * 0.05), Quantity(100 + i * 10), "buy_" + std::to_string(i));
             if (result.has_value()) {
                 buy_ids.push_back(result.value());
@@ -77,9 +77,9 @@ private:
         std::cout << "✅ Placed " << buy_ids.size() << " buy orders at different price levels" << std::endl;
         
         // Place multiple sell orders
-        std::vector<ExchangeId> sell_ids; // Renamed to camelCase
+        std::vector<ExchangeId> sell_ids;
         for (ObjectCount i = 0; i < 5; i++) {
-            auto result = exchange.placeSellOrder("session" + std::to_string(i+5), "AAPL", // Renamed to camelCase
+            auto result = exchange.placeSellOrder("session" + std::to_string(i+5), "AAPL",
                                       Price(150.5 + i * 0.05), Quantity(80 + i * 5), "sell_" + std::to_string(i));
             if (result.has_value()) {
                 sell_ids.push_back(result.value());
@@ -88,12 +88,12 @@ private:
         std::cout << "✅ Placed " << sell_ids.size() << " sell orders at different price levels" << std::endl;
         
         // Check order book state
-        auto book = exchange.getBook("AAPL"); // Renamed to camelCase
+        auto book = exchange.getBook("AAPL");
         if (book) {
-            std::cout << "✅ Order book contains " << book.value().m_bids.size() // Renamed to camelCase
+            std::cout << "✅ Order book contains " << book.value().m_bids.size()
                       << " bid levels and " << book.value().m_asks.size() << " ask levels" << std::endl;
             
-            if (!book.value().m_bids.empty() && !book.value().m_asks.empty()) { // Renamed to m_snake_case
+            if (!book.value().m_bids.empty() && !book.value().m_asks.empty()) {
                 auto spread = book.value().m_asks[0].m_price - book.value().m_bids[0].m_price;
                 std::cout << "✅ Current bid-ask spread: $" << std::fixed << std::setprecision(4) << spread << std::endl;
             }
@@ -161,7 +161,7 @@ private:
         
         auto start = std::chrono::high_resolution_clock::now();
         
-        std::vector<ExchangeId> order_ids; // Renamed to camelCase
+        std::vector<ExchangeId> order_ids;
         order_ids.reserve(num_orders);
         
         // Rapid order placement
@@ -173,9 +173,9 @@ private:
             int quantity = 10 + (rng() % 100);
             Quantity qty_semantic = Quantity(quantity);
             OrderInsertResult result;
-            if (i % 2 == 0) { // Renamed to camelCase
+            if (i % 2 == 0) {
                 result = exchange.placeBuyOrder(session, symbol, orderbook::Price(price), qty_semantic, "hft_buy_" + std::to_string(i));
-            } else { // Renamed to camelCase
+            } else {
                 result = exchange.placeSellOrder(session, symbol, orderbook::Price(price), qty_semantic, "hft_sell_" + std::to_string(i));
             }
             
@@ -198,8 +198,8 @@ private:
         
         // Check order books for all symbols
         int total_levels = 0;
-        for (const char* symbol : symbols) { // Renamed to camelCase
-            auto book = exchange.getBook(symbol); // Renamed to camelCase
+        for (const char* symbol : symbols) {
+            auto book = exchange.getBook(symbol);
             if (book) {
                 total_levels += book.value().m_bids.size() + book.value().m_asks.size();
             }
@@ -218,7 +218,7 @@ private:
         std::cout << "Creating deep order book for " << symbol << "..." << std::endl;
         
         // Create deep bid side
-        std::vector<ExchangeId> bid_ids; // Renamed to camelCase
+        std::vector<ExchangeId> bid_ids;
         for (ObjectCount i = 0; i < 20; i++) {
             double price = 100.0 - i * 0.01;
             int quantity = 100 + i * 5;
@@ -229,7 +229,7 @@ private:
         }
         
         // Create deep ask side
-        std::vector<ExchangeId> ask_ids; // Renamed to camelCase
+        std::vector<ExchangeId> ask_ids;
         for (ObjectCount i = 0; i < 20; i++) {
             double price = 100.5 + i * 0.01;
             int quantity = 80 + i * 3;
@@ -239,7 +239,7 @@ private:
             }
         }
         
-        auto book = exchange.getBook(symbol); // Renamed to camelCase
+        auto book = exchange.getBook(symbol);
         if (book) {
             std::cout << "✅ Order book depth analysis:" << std::endl;
             std::cout << "   Bid levels: " << book.value().m_bids.size() << std::endl;
@@ -270,7 +270,7 @@ private:
         }
         
         // Test market impact by removing liquidity
-        std::cout << "\nTesting market impact by removing top 5 levels..." << std::endl; // Renamed to camelCase
+        std::cout << "\nTesting market impact by removing top 5 levels..." << std::endl;
         for (ObjectCount i = 0; i < std::min(static_cast<ObjectCount>(5), bid_ids.size()); i++) {
             exchange.cancelOrder(bid_ids[i], "depth_maker");
         }
@@ -278,7 +278,7 @@ private:
             exchange.cancelOrder(ask_ids[i], "depth_maker");
         }
         
-        auto updated_book = exchange.getBook(symbol); // Renamed to camelCase
+        auto updated_book = exchange.getBook(symbol);
         if (updated_book) {
             std::cout << "✅ After removing top 5 levels:" << std::endl;
             std::cout << "   Remaining bid levels: " << updated_book.value().m_bids.size() << std::endl;
@@ -320,10 +320,10 @@ private:
                     Quantity quantity_semantic = Quantity(10 + (i % 50));
                     
                     OrderInsertResult result;
-                    if ((t + i) % 2 == 0) { // Renamed to camelCase
+                    if ((t + i) % 2 == 0) {
                         result = exchange.placeBuyOrder(session, symbol, orderbook::Price(price), quantity_semantic, 
                                             "conc_buy_" + std::to_string(t) + "_" + std::to_string(i));
-                    } else { // Renamed to camelCase
+                    } else {
                         result = exchange.placeSellOrder(session, symbol, orderbook::Price(price), quantity_semantic, 
                                              "conc_sell_" + std::to_string(t) + "_" + std::to_string(i));
                     }
@@ -385,8 +385,8 @@ private:
         std::cout << "✅ Non-existent order retrieval: " << (order1.has_value() ? "FAILED" : "CORRECTLY EMPTY") << std::endl;
 
         // Test 4: Non-existent instrument book
-        auto book1 = exchange.getBook("NONEXISTENT"); // Renamed to camelCase
-        std::cout << "✅ Non-existent instrument book: " << (book1.has_value() ? "FAILED" : "CORRECTLY EMPTY") << std::endl; // Renamed to has_value
+        auto book1 = exchange.getBook("NONEXISTENT");
+        std::cout << "✅ Non-existent instrument book: " << (book1.has_value() ? "FAILED" : "CORRECTLY EMPTY") << std::endl;
         
         // Test 5: Edge case orders
         auto edge_order1 = exchange.placeBuyOrder("edge_session", "EDGE", orderbook::Price(0.01), orderbook::Quantity(1), "edge_order1");
@@ -407,10 +407,10 @@ private:
         
         // Benchmark 1: Order creation speed
         std::cout << "Benchmark 1: Order creation speed..." << std::endl;
-        const ObjectCount benchmark_orders = 2000; // Renamed to camelCase
+        const ObjectCount benchmark_orders = 2000;
         
         auto start = std::chrono::high_resolution_clock::now();
-        std::vector<ExchangeId> benchmark_ids; // Renamed to camelCase
+        std::vector<ExchangeId> benchmark_ids;
         benchmark_ids.reserve(benchmark_orders);
         
         for (ObjectCount i = 0; i < benchmark_orders; i++) {
@@ -452,7 +452,7 @@ private:
         int book_access_count = 100;
         
         for (int i = 0; i < book_access_count; i++) {
-            auto book = exchange.getBook("BENCH"); // Renamed to camelCase
+            auto book = exchange.getBook("BENCH");
             if (book) {
                 // Simulate book analysis
                 volatile ObjectCount levels = book.value().m_bids.size() + book.value().m_asks.size();

@@ -18,17 +18,20 @@ The memory pool-backed order book achieves **~214K ops/sec** (Debug, 8-core) for
 - **Build**: Debug (`/Od /RTC1 /Zi`) — C++23 (`/std:c++latest`)
 - **Memory Pool**: `kMemoryPoolBlockSize=4096`, `kNodeSize=128`
 
-### Current Benchmarks (Debug Build)
+### Current Benchmarks (Debug Build, PooledPriceLevels)
 
-| Test | Operations | Time/Op (μs) | Throughput (ops/sec) |
-|------|-----------|-------------|-------------------|
-| **Multithread Insert (no trades)** | 4M (8 threads) | 4.66 μs | **214,435** |
-| **Multithread Insert (with trades)** | 4M (8 threads) | 6.66 μs | **150,044** |
-| **Multithread Cancel** | 2M | 3.30 μs | **302,802** |
-| **Single-thread Insert (10 levels)** | — | — | Crashes (stack overflow in Debug — 10M pool reserve) |
-| **Single-thread Cancel (10 levels)** | — | — | Crashes (stack overflow in Debug — 1M pool reserve) |
+| Test | Price Levels | Time/Op (μs) | Throughput (ops/sec) |
+|------|-------------|-------------|-------------------|
+| **Insert (no trades)** | 1000 | 2.82 μs | **354,492** |
+| **Insert (with trades)** | 1000 | 4.47 μs | **223,528** |
+| **Cancel** | 1000 | 1.90 μs | **526,277** |
+| **Insert (no trades)** | 10 | 2.70 μs | **370,358** |
+| **Insert (with trades)** | 10 | 4.25 μs | **235,147** |
+| **Cancel** | 10 | 2.14 μs | **466,223** |
+| **Multithread Insert (no trades)** | — | — | See note |
+| **Multithread Insert (with trades)** | — | — | See note |
 
-> ⚠️ The single-threaded benchmark (`benchmark_test.exe`) crashes with `STATUS_STACK_OVERFLOW (0xC00000FD)` in Debug mode due to reserving 10M pool nodes (~2 GB virtual). Run with a Release build or reduce `kNumOrders`.
+> **Note**: Multithread benchmarks (`benchmark_multithread_test.exe`) have known concurrency issues with the `PooledPriceLevels` vector-based implementation. They are not yet functional — see the ConcurrentOperations integration test failure. Single-threaded benchmarks now all pass without crash.
 
 ### Memory Pool Auto-Reserve
 
@@ -42,8 +45,9 @@ orderbook::OrderPool::reserve(expected_order_count);
 
 | Metric | Debug (current) | Estimated Release | Improvement |
 |--------|----------------|-------------------|-------------|
-| **Insert (multithread)** | 214K ops/sec | ~5–10M ops/sec | 25–50× |
-| **Cancel (multithread)** | 302K ops/sec | ~4–8M ops/sec | 15–25× |
+| **Insert (single-thread, 1000 levels, no trades)** | 354K ops/sec | ~5–10M ops/sec | 15–30× |
+| **Insert (single-thread, 1000 levels, with trades)** | 223K ops/sec | ~4–8M ops/sec | 15–35× |
+| **Cancel (single-thread, 1000 levels)** | 526K ops/sec | ~5–10M ops/sec | 10–20× |
 
 ## 🏗️ Current Architecture
 
@@ -77,7 +81,8 @@ auto order = std::allocate_shared<Order>(Allocator{}, ...);
 
 ### Current Limitations
 - Benchmarks run in **Debug** configuration (`/Od /RTC1`) — results are not representative of production
-- Single-threaded benchmark (`benchmark_test.exe`) crashes with stack overflow in Debug (10M pool nodes)
+- Single-threaded benchmarks all pass without crash (stack overflow was fixed with iterative `~OrderList()`)
+- Multithread benchmarks are not functional due to `PooledPriceLevels` vector-based implementation (not thread-safe)
 - Build in **Release** (`/O2`) to obtain meaningful throughput numbers
 
 ### How to Run

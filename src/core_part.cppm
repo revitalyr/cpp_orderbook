@@ -2,10 +2,13 @@ module;
 
 #include <atomic>
 #include <array>
+#include <boost/intrusive/list_hook.hpp>
+#include <boost/intrusive/list.hpp>
+#include <boost/intrusive/link_mode.hpp>
+
 #include <cfloat>
 #include <charconv>
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <deque>
@@ -409,8 +412,7 @@ struct alignas(64) Order {
         ExchangeId exchangeId
     );
 private:
-    std::shared_ptr<Order> m_nextList{nullptr};
-    std::weak_ptr<Order> m_prevList;
+    boost::intrusive::list_member_hook<boost::intrusive::link_mode<boost::intrusive::normal_link>> m_listHook;
     bool m_onList = false;
     std::atomic<Order*> m_nextPtr{nullptr};
     const Timestamp m_timeSubmitted;
@@ -465,7 +467,7 @@ public:
     bool isPartiallyFilled() const noexcept { return m_remaining == Quantity(0) && m_filled > Quantity(0); }
     bool isActive() const noexcept { return m_remaining > 0; }
     Order(const Order& other)
-        : m_nextList(nullptr), m_prevList(), m_onList(false), m_nextPtr(nullptr),
+        : m_listHook(), m_onList(false), m_nextPtr(nullptr),
           m_timeSubmitted(other.m_timeSubmitted), m_orderIdNum(other.m_orderIdNum),
           m_price(other.m_price), m_averagePrice(other.m_averagePrice),
           m_remaining(other.m_remaining), m_filled(other.m_filled),
@@ -476,7 +478,7 @@ public:
     Order(SessionIdView sessionId, OrderIdStrView orderId,
           InstrumentSymbolView instrument, Price price, Quantity quantity,
           Order::Side side, ExchangeId exchangeId)
-        : m_nextList(nullptr), m_prevList(), m_onList(false),
+        : m_listHook(), m_onList(false),
           m_timeSubmitted(epoch()), m_price(price), m_remaining(quantity),
           m_quantity(quantity),
           m_sessionId(g_globalStringInterner().intern(sessionId)),
@@ -526,11 +528,16 @@ inline std::shared_ptr<Order> Order::create(
 // OrderList
 // ============================================================================
 
+namespace bi = boost::intrusive;
+
 class OrderList {
     template <typename TListener> friend class OrderBook;
 private:
-    std::shared_ptr<Order> m_head = nullptr;
-    std::shared_ptr<Order> m_tail = nullptr;
+    using Hook = bi::list_member_hook<bi::link_mode<bi::normal_link>>;
+    using MemberHook = bi::member_hook<Order, Hook, &Order::m_listHook>;
+    using List = bi::list<Order, MemberHook, bi::constant_time_size<false>>;
+
+    List m_list;
     Price m_price;
     Quantity m_totalQuantity{0};
 public:
@@ -539,63 +546,35 @@ public:
     OrderList& operator=(OrderList&&) noexcept = default;
     OrderList(const OrderList&) = delete;
     OrderList& operator=(const OrderList&) = delete;
-    ~OrderList() {
-        while (m_head) {
-            auto next = m_head->m_nextList;
-            m_head->m_nextList = nullptr;
-            m_head = next;
-        }
-    }
+    ~OrderList() = default;
     const Price& price() const { return m_price; }
     Quantity totalQuantity() const noexcept { return m_totalQuantity; }
 
-    struct Iterator {
-        friend class OrderList;
-        using iterator_category = std::forward_iterator_tag;
-        using difference_type   = std::ptrdiff_t;
-        using value_type        = std::shared_ptr<Order>;
-        using reference         = std::shared_ptr<Order>&;
-        value_type operator*() const { return current; }
-        Iterator& operator++() { current = current->m_nextList; return *this; }
-        bool operator==(const Iterator& other) const { return current == other.current; }
-        operator bool() const { return current != nullptr; }
-    private:
-        Iterator(std::shared_ptr<Order> node) : current(node) {}
-        std::shared_ptr<Order> current;
-    };
-
-    void pushBack(std::shared_ptr<Order> order) {
-        if (!order) return;
-        order->m_onList = true;
-        m_totalQuantity += order->remainingQuantity();
-        if (m_head == nullptr) {
-            m_head = order;
-            m_tail = order;
-        } else {
-            order->m_prevList = m_tail;
-            m_tail->m_nextList = order;
-            m_tail = order;
-        }
+    void pushBack(Order& order) {
+        order.m_onList = true;
+        m_totalQuantity += order.remainingQuantity();
+        m_list.push_back(order);
     }
 
-    void remove(std::shared_ptr<Order> order) {
-        if (!order) return;
-        if (!order->m_onList) throw std::runtime_error("node is null on removal");
-        order->m_onList = false;
-        m_totalQuantity -= order->remainingQuantity();
-        auto prev = order->m_prevList.lock();
-        auto next = order->m_nextList;
-        if (prev) { prev->m_nextList = next; }
-        else if (m_head == order) { m_head = next; }
-        if (next) { next->m_prevList = prev; }
-        else if (m_tail == order) { m_tail = prev; }
-        order->m_nextList = nullptr;
-        order->m_prevList.reset();
+    void remove(Order& order) {
+        if (!order.m_onList)
+            throw std::runtime_error("node is null on removal");
+        order.m_onList = false;
+        m_totalQuantity -= order.remainingQuantity();
+        m_list.erase(List::s_iterator_to(order));
     }
 
-    std::shared_ptr<Order> front() const { return m_head; }
-    Iterator begin() const { return Iterator(m_head); }
-    Iterator end() const { return Iterator(nullptr); }
+    Order* front() {
+        return m_list.empty() ? nullptr : &m_list.front();
+    }
+
+    const Order* front() const {
+        return m_list.empty() ? nullptr : &m_list.front();
+    }
+
+    using Iterator = List::const_iterator;
+    Iterator begin() const { return m_list.begin(); }
+    Iterator end() const { return m_list.end(); }
 };
 
 // ============================================================================
@@ -802,12 +781,6 @@ private:
     bool& m_flagRef;
 };
 
-inline OrderInsertResult legacyToModern(std::optional<ExchangeId> legacyResult,
-                                         std::source_location loc = std::source_location::current()) {
-    if (legacyResult.has_value()) return OrderInsertResult(*legacyResult);
-    return std::unexpected(ErrorContext(InsertError::InternalError, EngineConstants::kLegacyNulloptResult, loc));
-}
-
 // ============================================================================
 // PriceLevels
 // ============================================================================
@@ -816,7 +789,11 @@ struct price_compare {
     explicit price_compare(bool ascending) : m_ascending(ascending) {}
     template<class T, class U>
     inline bool operator()(const T& t, const U& u) const {
-        return (m_ascending) ? t.price() < u : t.price() > u;
+        if constexpr (requires { t.price(); }) {
+            return (m_ascending) ? t.price() < u : t.price() > u;
+        } else {
+            return (m_ascending) ? t < u : t > u;
+        }
     }
     const bool m_ascending;
 };
@@ -828,27 +805,27 @@ private:
     ContainerOfPtr m_levels;
 public:
     PointerPriceLevels(bool ascending) : m_cmpFn(ascending) {}
-    void insertOrder(std::shared_ptr<Order> order) {
-        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn);
+    void insertOrder(Order& order) {
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order.price(), m_cmpFn);
         std::shared_ptr<OrderList> list;
-        if (itr == m_levels.end() || (*itr)->price() != order->price()) {
-            list = std::make_shared<OrderList>(order->price());
+        if (itr == m_levels.end() || (*itr)->price() != order.price()) {
+            list = std::make_shared<OrderList>(order.price());
             m_levels.insert(itr, list);
         } else {
             list = *itr;
         }
         list->pushBack(order);
     }
-    void removeOrder(std::shared_ptr<Order> order) {
-        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn);
-        if (itr == m_levels.end() || (*itr)->price() != order->price()) {
+    void removeOrder(Order& order) {
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order.price(), m_cmpFn);
+        if (itr == m_levels.end() || (*itr)->price() != order.price()) {
             throw std::runtime_error("price level for order does not exist");
         }
         auto list = *itr;
         list->remove(order);
         if (list->front() == nullptr) m_levels.erase(itr);
     }
-    std::shared_ptr<Order> front() const {
+    Order* front() const {
         auto itr = m_levels.begin();
         return itr == m_levels.end() ? nullptr : (*itr)->front();
     }
@@ -865,25 +842,25 @@ private:
     ContainerOfStruct m_levels;
 public:
     StructPriceLevels(bool ascending) : m_cmpFn(ascending) {}
-    void insertOrder(std::shared_ptr<Order> order) {
-        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn);
-        if (itr == m_levels.end() || itr->price() != order->price()) {
-            OrderList list(order->price());
+    void insertOrder(Order& order) {
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order.price(), m_cmpFn);
+        if (itr == m_levels.end() || itr->price() != order.price()) {
+            OrderList list(order.price());
             list.pushBack(order);
             m_levels.insert(itr, std::move(list));
         } else {
             itr->pushBack(order);
         }
     }
-    void removeOrder(std::shared_ptr<Order> order) {
-        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn);
-        if (itr == m_levels.end() || itr->price() != order->price()) {
+    void removeOrder(Order& order) {
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order.price(), m_cmpFn);
+        if (itr == m_levels.end() || itr->price() != order.price()) {
             throw std::runtime_error("price level for order does not exist");
         }
         itr->remove(order);
         if (itr->front() == nullptr) m_levels.erase(itr);
     }
-    std::shared_ptr<Order> front() const {
+    Order* front() const {
         auto itr = m_levels.begin();
         if (itr == m_levels.end()) return nullptr;
         return itr->front();
@@ -903,25 +880,25 @@ private:
     MapOfStruct m_levels;
 public:
     MapPriceLevels(bool ascending) : m_cmpFn(ascending), m_levels(m_cmpFn) {}
-    void insertOrder(std::shared_ptr<Order> order) {
-        auto itr = m_levels.lower_bound(order->price());
-        if (itr == m_levels.end() || itr->first != order->price()) {
-            OrderList list(order->price());
+    void insertOrder(Order& order) {
+        auto itr = m_levels.lower_bound(order.price());
+        if (itr == m_levels.end() || itr->first != order.price()) {
+            OrderList list(order.price());
             list.pushBack(order);
             m_levels.insert({list.price(), std::move(list)});
         } else {
             itr->second.pushBack(order);
         }
     }
-    void removeOrder(std::shared_ptr<Order> order) {
-        auto itr = m_levels.lower_bound(order->price());
-        if (itr == m_levels.end() || itr->first != order->price()) {
+    void removeOrder(Order& order) {
+        auto itr = m_levels.lower_bound(order.price());
+        if (itr == m_levels.end() || itr->first != order.price()) {
             throw std::runtime_error("price level for order does not exist");
         }
         itr->second.remove(order);
         if (itr->second.front() == nullptr) m_levels.erase(itr);
     }
-    std::shared_ptr<Order> front() const {
+    Order* front() const {
         auto itr = m_levels.begin();
         if (itr == m_levels.end()) return nullptr;
         return itr->second.front();
@@ -940,25 +917,25 @@ private:
     MapOfPtr m_levels;
 public:
     MapPtrPriceLevels(bool ascending) : m_cmpFn(ascending), m_levels(m_cmpFn) {}
-    void insertOrder(std::shared_ptr<Order> order) {
-        auto itr = m_levels.lower_bound(order->price());
-        if (itr == m_levels.end() || itr->first != order->price()) {
-            auto list = std::make_shared<OrderList>(order->price());
+    void insertOrder(Order& order) {
+        auto itr = m_levels.lower_bound(order.price());
+        if (itr == m_levels.end() || itr->first != order.price()) {
+            auto list = std::make_shared<OrderList>(order.price());
             list->pushBack(order);
             m_levels.insert({list->price(), list});
         } else {
             itr->second->pushBack(order);
         }
     }
-    void removeOrder(std::shared_ptr<Order> order) {
-        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order->price(), m_cmpFn);
-        if (itr == m_levels.end() || itr->first != order->price()) {
+    void removeOrder(Order& order) {
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order.price(), m_cmpFn);
+        if (itr == m_levels.end() || itr->first != order.price()) {
             throw std::runtime_error("price level for order does not exist");
         }
         itr->second->remove(order);
         if (itr->second->front() == nullptr) m_levels.erase(itr);
     }
-    std::shared_ptr<Order> front() const {
+    Order* front() const {
         auto itr = m_levels.begin();
         if (itr == m_levels.end()) return nullptr;
         return itr->second->front();
@@ -971,13 +948,87 @@ public:
     }
 };
 
+class PooledPriceLevels {
+public:
+    struct Entry {
+        Price m_price;
+        OrderList* m_orders;
+
+        const Price& price() const { return m_price; }
+        Quantity totalQuantity() const { return m_orders->totalQuantity(); }
+    };
+
+private:
+    std::vector<Entry> m_levels;
+    price_compare m_cmpFn;
+
+    static MemoryPool<OrderList>& pool() {
+        static MemoryPool<OrderList> p;
+        return p;
+    }
+
+public:
+    PooledPriceLevels(bool ascending) : m_cmpFn(ascending) {
+        pool().reserve(256);
+    }
+
+    void insertOrder(Order& order) {
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order.price(),
+            [this](const Entry& e, Price p) { return m_cmpFn(e.m_price, p); });
+
+        if (itr == m_levels.end() || itr->m_price != order.price()) {
+            auto* list = pool().construct(order.price());
+            if (!list) {
+                pool().reserve(256);
+                list = pool().construct(order.price());
+            }
+            list->pushBack(order);
+            m_levels.insert(itr, {order.price(), list});
+        } else {
+            itr->m_orders->pushBack(order);
+        }
+    }
+
+    void removeOrder(Order& order) {
+        auto itr = std::lower_bound(m_levels.begin(), m_levels.end(), order.price(),
+            [this](const Entry& e, Price p) { return m_cmpFn(e.m_price, p); });
+
+        if (itr == m_levels.end() || itr->m_price != order.price()) {
+            throw std::runtime_error("price level for order does not exist");
+        }
+
+        itr->m_orders->remove(order);
+        if (itr->m_orders->front() == nullptr) {
+            pool().deallocate(itr->m_orders);
+            m_levels.erase(itr);
+        }
+    }
+
+    Order* front() const {
+        if (m_levels.empty()) return nullptr;
+        return m_levels.front().m_orders->front();
+    }
+
+    bool empty() const { return m_levels.empty(); }
+    size_t size() const { return m_levels.size(); }
+
+    void forEach(std::function<void(const OrderList*)> fn) const {
+        for (const auto& entry : m_levels) {
+            fn(entry.m_orders);
+        }
+    }
+
+    const std::vector<Entry>& levels() const { return m_levels; }
+};
+
 using DequeuePtrPriceLevels = PointerPriceLevels<std::deque<std::shared_ptr<OrderList>>>;
 using VectorPointerPriceLevels = PointerPriceLevels<std::vector<std::shared_ptr<OrderList>>>;
 using VectorPriceLevels = StructPriceLevels<std::vector<OrderList>>;
-using StdMapPriceLevels = MapPriceLevels<std::map<Price, OrderList, std::function<bool(const Price&, const Price&)>>>;
-using StdMapPointerPriceLevels = MapPtrPriceLevels<std::map<Price, std::shared_ptr<OrderList>, std::function<bool(const Price&, const Price&)>>>;
+using StdMapPriceLevels = MapPriceLevels<std::map<Price, OrderList, price_compare>>;
 
-using PriceLevels = VectorPriceLevels;
+using StdMapPointerPriceLevels = MapPtrPriceLevels<std::map<Price, std::shared_ptr<OrderList>, price_compare>>;
+
+using PriceLevels = PooledPriceLevels;
 
 // ============================================================================
 // OrderMap
@@ -1134,27 +1185,37 @@ private:
     PriceLevels m_asks = PriceLevels(true);
     TListener& m_listener;
     void matchOrders(Order::Side aggressorSide) {
-        const auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
         while (!m_bids.empty() && !m_asks.empty()) {
             auto bid = m_bids.front();
             auto ask = m_asks.front();
-            if (bid->isMarket() || ask->isMarket() || bid->m_price >= ask->m_price) {
-                Quantity qty = std::min(bid->m_remaining, ask->m_remaining);
-                Price price = (aggressorSide == Order::Side::BUY) ? ask->m_price : bid->m_price;
-                std::shared_ptr<Order> aggressor = aggressorSide == Order::Side::BUY ? bid : ask;
-                std::shared_ptr<Order> opposite = aggressorSide == Order::Side::BUY ? ask : bid;
-                bid->fill(qty, price);
-                ask->fill(qty, price);
-                const Trade trade(price, qty, *aggressor, *opposite, now_ns);
-                if (bid->m_remaining == 0) m_bids.removeOrder(bid);
-                if (ask->m_remaining == 0) m_asks.removeOrder(ask);
-                m_listener.onOrder(*bid);
-                m_listener.onOrder(*ask);
-                m_listener.onTrade(trade);
-            } else {
-                break;
+        if (bid->isMarket() || ask->isMarket() || bid->m_price >= ask->m_price) {
+            Quantity qty = std::min(bid->m_remaining, ask->m_remaining);
+            Price price = (aggressorSide == Order::Side::BUY) ? ask->m_price : bid->m_price;
+            auto* aggressor = aggressorSide == Order::Side::BUY ? bid : ask;
+            auto* opposite  = aggressorSide == Order::Side::BUY ? ask : bid;
+            bid->fill(qty, price);
+            ask->fill(qty, price);
+            const auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            const Trade trade(price, qty, *aggressor, *opposite, now_ns);
+            if (bid->m_remaining == 0) m_bids.removeOrder(*bid);
+            if (ask->m_remaining == 0) m_asks.removeOrder(*ask);
+            m_listener.onOrder(*bid);
+            m_listener.onOrder(*ask);
+            m_listener.onTrade(trade);
+        } else {
+            break;
+        }
+
+        auto ordersOnSide = aggressorSide == Order::Side::BUY ? &m_bids : &m_asks;
+        if (!ordersOnSide->empty()) {
+            auto* order = ordersOnSide->front();
+            if (order && order->isMarket()) {
+                order->cancel();
+                ordersOnSide->removeOrder(*order);
+                m_listener.onOrder(*order);
             }
+        }
         }
         auto ordersOnSide = aggressorSide == Order::Side::BUY ? &m_bids : &m_asks;
         if (!ordersOnSide->empty()) {
@@ -1173,6 +1234,12 @@ public:
     ~OrderBook() = default;
 
     OrderInsertResult insertOrder(
+        std::shared_ptr<Order> order
+    ) {
+        return insertOrderWithLocation(order);
+    }
+
+    OrderInsertResult insertOrderWithLocation(
         std::shared_ptr<Order> order,
         std::source_location location = std::source_location::current()
     ) {
@@ -1193,14 +1260,14 @@ public:
             return std::unexpected(ErrorContext(InsertError::OrderAlreadyExists,
                 std::format("{} ID: {}", EngineConstants::kOrderAlreadyOnList, order->m_exchangeId), location));
         }
-        auto orderList = order->m_side == Order::Side::BUY ? &m_bids : &m_asks;
-        orderList->insertOrder(order);
+    auto orderList = order->m_side == Order::Side::BUY ? &m_bids : &m_asks;
+    orderList->insertOrder(*order);
         m_listener.onOrder(*order);
         matchOrders(order->m_side);
         return order->m_exchangeId;
     }
 
-    void insertOrderLegacy(std::shared_ptr<Order> order) { insertOrder(order); }
+
 
     int cancelOrder(std::shared_ptr<Order> order) {
         if (!order) return -1;
@@ -1208,7 +1275,7 @@ public:
             order->cancel();
             auto ordersOnSide = order->m_side == Order::Side::BUY ? &m_bids : &m_asks;
             if (ordersOnSide && order->isOnList()) {
-                ordersOnSide->removeOrder(order);
+                ordersOnSide->removeOrder(*order);
                 m_listener.onOrder(*order);
                 return 0;
             } else {
@@ -1232,14 +1299,14 @@ public:
     void quote(const QuoteOrders& quotes, Price bidPrice, Quantity bidQuantity, Price askPrice, Quantity askQuantity) {
         auto bid = quotes.m_bid;
         auto ask = quotes.m_ask;
-        if (bid->isOnList()) m_bids.removeOrder(bid);
-        if (ask->isOnList()) m_asks.removeOrder(ask);
+        if (bid->isOnList()) m_bids.removeOrder(*bid);
+        if (ask->isOnList()) m_asks.removeOrder(*ask);
         if (bidQuantity != Quantity(0)) {
             bid->m_price = bidPrice;
             bid->m_quantity = bidQuantity;
             bid->m_remaining = bidQuantity;
             bid->m_filled = Quantity(0);
-            m_bids.insertOrder(bid);
+            m_bids.insertOrder(*bid);
             matchOrders(Order::Side::BUY);
         }
         if (askQuantity != Quantity(0)) {
@@ -1247,7 +1314,7 @@ public:
             ask->m_quantity = askQuantity;
             ask->m_remaining = askQuantity;
             ask->m_filled = Quantity(0);
-            m_asks.insertOrder(ask);
+            m_asks.insertOrder(*ask);
             matchOrders(Order::Side::SELL);
         }
     }
@@ -1257,12 +1324,9 @@ public:
         auto snap = [](const PriceLevels& src, std::vector<BookLevel>& dst, std::vector<ExchangeId>& oids) {
             auto fn = [&](const OrderList* orders) {
                 Quantity quantity(0);
-                for (auto itr = orders->begin(); itr != orders->end(); ++itr) {
-                    auto order = *itr;
-                    if (order) {
-                        quantity = quantity + order->remainingQuantity();
-                        oids.push_back(order->m_exchangeId);
-                    }
+                for (const Order& order : *orders) {
+                    quantity = quantity + order.remainingQuantity();
+                    oids.push_back(order.m_exchangeId);
                 }
                 dst.push_back({orders->m_price, quantity});
             };
@@ -1282,13 +1346,13 @@ public:
 
     std::vector<std::string> instruments() const { return {m_instrument}; }
     auto getBidView() const {
-        return m_bids.levels() | std::views::transform([](const OrderList& list) {
-            return BookLevel{list.price(), list.totalQuantity()};
+        return m_bids.levels() | std::views::transform([](const auto& entry) {
+            return BookLevel{entry.price(), entry.totalQuantity()};
         });
     }
     auto getAskView() const {
-        return m_asks.levels() | std::views::transform([](const OrderList& list) {
-            return BookLevel{list.price(), list.totalQuantity()};
+        return m_asks.levels() | std::views::transform([](const auto& entry) {
+            return BookLevel{entry.price(), entry.totalQuantity()};
         });
     }
 };

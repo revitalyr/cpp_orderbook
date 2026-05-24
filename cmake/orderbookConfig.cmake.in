@@ -2,9 +2,6 @@
 
 include(CMakeFindDependencyMacro)
 
-# Find dependencies
-find_dependency(GTest CONFIG REQUIRED)
-
 # Include our targets
 include("${CMAKE_CURRENT_LIST_DIR}/orderbook-targets.cmake")
 

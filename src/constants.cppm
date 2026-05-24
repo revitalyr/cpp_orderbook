@@ -89,7 +89,6 @@ constexpr std::string_view kExchangeErrorPrefix = "[EXCHANGE ERROR] ";
 constexpr std::string_view kOrderInsertionFailed = "Order insertion failed: ";
 constexpr std::string_view kExceptionInInsertOrder = "Exception in insertOrder: ";
 constexpr std::string_view kOrderbookErrorPrefix = "[ORDERBOOK ERROR] ";
-constexpr std::string_view kLegacyNulloptResult = "Legacy nullopt result";
 constexpr std::string_view kPriceLevelDoesNotExist = "price level for order does not exist";
 
 // Test-specific constants

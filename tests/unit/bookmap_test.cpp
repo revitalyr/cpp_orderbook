@@ -5,10 +5,10 @@
 #include "core/exchange.h"
 
 using namespace orderbook;
-static orderbook::ExchangeListener g_dummyListener; // Renamed to g_camelCase
+static orderbook::ExchangeListener g_dummyListener;
 
 TEST_CASE("BookMap basic operations", "[bookmap]") {
-    BookMap<ExchangeListener> bookMap; // Renamed to camelCase
+    BookMap<ExchangeListener> bookMap;
 
     auto orderBook = bookMap.getOrderBook("dummy");
     REQUIRE(orderBook == nullptr);
@@ -16,7 +16,7 @@ TEST_CASE("BookMap basic operations", "[bookmap]") {
     orderBook = bookMap.getOrCreate("dummy", g_dummyListener);
     REQUIRE(orderBook != nullptr);
 
-    auto orderBook2 = bookMap.getOrCreate("dummy", g_dummyListener); // Renamed to camelCase
+    auto orderBook2 = bookMap.getOrCreate("dummy", g_dummyListener);
     REQUIRE(orderBook == orderBook2);
 
     auto orderBook3 = bookMap.getOrderBook("dummy");
@@ -24,24 +24,24 @@ TEST_CASE("BookMap basic operations", "[bookmap]") {
     REQUIRE(orderBook2 == orderBook3);
 }
 
-TEST_CASE("BookMap instruments", "[bookmap]") { // Renamed to camelCase
-    BookMap<ExchangeListener> bookMap; // Renamed to camelCase
+TEST_CASE("BookMap instruments", "[bookmap]") {
+    BookMap<ExchangeListener> bookMap;
     
-    auto orderBook = bookMap.getOrCreate("dummy", g_dummyListener); // Renamed to camelCase, g_camelCase
-    REQUIRE(orderBook != nullptr); // Renamed to camelCase
+    auto orderBook = bookMap.getOrCreate("dummy", g_dummyListener);
+    REQUIRE(orderBook != nullptr);
     
-    // Check if orderBook has instruments // Renamed to camelCase
-    if (orderBook && orderBook->instruments().size() > 0) { // Renamed to camelCase
-        REQUIRE(orderBook->instruments()[0] == "dummy"); // Renamed to camelCase
-        REQUIRE(orderBook->instruments().size() == 1); // Renamed to camelCase
+    // Check if orderBook has instruments
+    if (orderBook && orderBook->instruments().size() > 0) {
+        REQUIRE(orderBook->instruments()[0] == "dummy");
+        REQUIRE(orderBook->instruments().size() == 1);
     } else {
-        REQUIRE(orderBook->instruments().size() == 0); // Renamed to camelCase
+        REQUIRE(orderBook->instruments().size() == 0);
     }
     
-    // Check if orderBook has exactly one instrument // Renamed to camelCase
-    if (orderBook && orderBook->instruments().size() == 1) { // Renamed to camelCase
-        REQUIRE(orderBook->instruments()[0] == "dummy"); // Renamed to camelCase
+    // Check if orderBook has exactly one instrument
+    if (orderBook && orderBook->instruments().size() == 1) {
+        REQUIRE(orderBook->instruments()[0] == "dummy");
     } else {
-        REQUIRE(orderBook->instruments().size() == 1); // Renamed to camelCase
+        REQUIRE(orderBook->instruments().size() == 1);
     }
 }

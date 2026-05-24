@@ -79,7 +79,4 @@ using NanosecondTimestamp = int64_t;
 /** Semantic alias for price representation using fixed-point arithmetic */
 using Price = Fixed<7>;
 
-/** Legacy alias for backward compatibility */
-using F = Fixed<7>;
-
 } // namespace orderbook

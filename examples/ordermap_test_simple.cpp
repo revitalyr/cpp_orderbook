@@ -6,10 +6,10 @@ import orderbook;
 using namespace orderbook;
 
 int main() {
-    OrderMap map; // Renamed to camelCase
+    OrderMap map;
     
     // Test single order to avoid any recursion, using smart pointers
-    auto o = TestOrder::create(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY); // Renamed to camelCase
+    auto o = TestOrder::create(ExchangeId(1), Price(100), Quantity(10), Order::Side::BUY);
     
     // Verify initial state
     assert(map.get(1)==nullptr);

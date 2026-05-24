@@ -8,10 +8,11 @@
 #include <vector>    // For std::vector
 
 #include "orderbook.h"
-#include "constants.h"
 
 /** Book is a lock-free map of instrument -> OrderBook */
 namespace orderbook {
+
+constexpr size_t kMaxInstruments = 1024;
 
 template <typename TListener>
 class BookMap {
@@ -23,13 +24,13 @@ public:
         }
     }
     
-    std::shared_ptr<OrderBook<TListener>> getOrCreate(InstrumentSymbolView instrument, TListener& listener) { // Renamed to camelCase
+    std::shared_ptr<OrderBook<TListener>> getOrCreate(InstrumentSymbolView instrument, TListener& listener) {
         auto hash = std::hash<std::string_view>{}(instrument);
         const auto start = hash % kMaxInstruments;
         auto orderBook = m_orderBooks[start].load();
         if (orderBook != nullptr && orderBook->m_instrument == instrument) return orderBook;
         
-        auto new_book = std::make_shared<OrderBook<TListener>>(std::string(instrument), listener); // Renamed to new_snake_case
+        auto new_book = std::make_shared<OrderBook<TListener>>(std::string(instrument), listener);
         auto index = start;
         while (true) {
             if (orderBook != nullptr) {
@@ -45,7 +46,7 @@ public:
         }
     }
     
-    std::shared_ptr<OrderBook<TListener>> getOrderBook(InstrumentSymbolView instrument) const { // Renamed to camelCase
+    std::shared_ptr<OrderBook<TListener>> getOrderBook(InstrumentSymbolView instrument) const {
         auto hash = std::hash<std::string_view>{}(instrument);
         const auto start = hash % kMaxInstruments;
         auto orderBook = m_orderBooks[start].load();

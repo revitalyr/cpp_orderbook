@@ -5,7 +5,8 @@
 #include <string>   // For std::string, std::to_string
 #include <vector>   // For std::vector
 
-import orderbook;
+#include "core/exchange.h"
+#include "core/test.h"
 
 using namespace orderbook;
 
@@ -56,7 +57,7 @@ private:
         auto buy2 = exchange.placeBuyOrder("session2", "AAPL", orderbook::Price(150.20), orderbook::Quantity(50), "buy2");
         
         if (buy1 && buy2) {
-            std::cout << "✅ Buy orders placed successfully" << std::endl; // Renamed to camelCase
+            std::cout << "✅ Buy orders placed successfully" << std::endl;
             std::cout << "   Buy1 ID: " << buy1.value() << std::endl;
             std::cout << "   Buy2 ID: " << buy2.value() << std::endl;
         }
@@ -74,7 +75,7 @@ private:
         // Check order book
         auto book = exchange.getBook("AAPL");
         if (book) {
-            std::cout << "✅ Order book retrieved with " // Renamed to camelCase
+            std::cout << "✅ Order book retrieved with "
                       << book.value().m_bids.size() << " bid levels and " 
                       << book.value().m_asks.size() << " ask levels" << std::endl;
         }
