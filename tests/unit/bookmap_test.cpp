@@ -1,8 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "core/bookmap.h"
-#include "core/orderbook.h"
-#include "core/exchange.h"
+#include <boost/intrusive/list.hpp>
+import orderbook;
 
 using namespace orderbook;
 static orderbook::ExchangeListener g_dummyListener;

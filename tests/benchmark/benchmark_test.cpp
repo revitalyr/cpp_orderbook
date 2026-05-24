@@ -1,17 +1,14 @@
 #include <algorithm>
-#include <chrono> // For std::chrono
-#include <iostream> // For std::cout, std::cerr
-#include <memory> // For std::shared_ptr
+#include <chrono>
+#include <iostream>
+#include <memory>
 #include <random>
 #include <stdexcept>
-#include <string> // For std::string
-#include <thread> // For std::thread::hardware_concurrency
+#include <string>
+#include <thread>
 
-#include "core/exchange.h"
-#include "core/orderbook.h"
-#include "core/order.h"
-#include "core/test.h"
-#include "safety/production_safety.h"
+#include <boost/intrusive/list.hpp>
+import orderbook;
 
 using namespace orderbook;
 
@@ -101,7 +98,7 @@ void cancelOrders(const int priceLevels) {
 int main() {
     printf("BENCHMARK STARTING\n");
     fflush(stdout);
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     printf("sizeof Fixed %zu cores %zu\n", sizeof(orderbook::Price), (size_t)std::thread::hardware_concurrency());
     fflush(stdout);

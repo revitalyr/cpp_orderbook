@@ -1,11 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
-#include <string> // For std::string
-#include <vector> // For std::vector
+#include <string>
+#include <vector>
 
-#include "core/orderbook.h"
-#include "core/order.h"
-#include "core/exchange.h"
-#include "core/test.h"
+#include <boost/intrusive/list.hpp>
+import orderbook;
 
 using namespace orderbook;
 

@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "core/test.h"
+#include <boost/intrusive/list.hpp>
+import orderbook;
 
 using namespace orderbook;
 TEST_CASE("Order basic creation", "[order]") {

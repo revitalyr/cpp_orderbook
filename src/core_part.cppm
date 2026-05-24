@@ -1,5 +1,6 @@
 module;
 
+#include <algorithm>
 #include <atomic>
 #include <array>
 #include <boost/intrusive/list_hook.hpp>
@@ -53,7 +54,7 @@ import orderbook.constants;
 // ProductionSafety — at global scope for compatibility with headers
 // ============================================================================
 
-class ProductionSafety {
+export class ProductionSafety {
 public:
     using TimePoint = std::chrono::steady_clock::time_point;
     using Duration = std::chrono::steady_clock::duration;
@@ -358,8 +359,11 @@ struct MemoryPoolAllocator {
     MemoryPoolAllocator() = default;
     template <typename U>
     MemoryPoolAllocator(const MemoryPoolAllocator<U, PoolType>&) noexcept {}
-    T* allocate(std::size_t n) {
+    [[nodiscard]] T* allocate(std::size_t n) {
         if (n != 1) throw std::bad_array_new_length();
+        auto* node = PoolType::instance().popFree();
+        if (node) [[likely]] return reinterpret_cast<T*>(node);
+        PoolType::instance().reserve(256);
         return reinterpret_cast<T*>(PoolType::instance().popFree());
     }
     void deallocate(T* p, std::size_t) noexcept {
@@ -398,6 +402,7 @@ struct alignas(64) Order {
     friend class OrderList;
     friend class OrderMap;
     template <typename TListener> friend class Exchange;
+    friend class TestOrder;
     template<typename> friend class PointerPriceLevels;
     template<typename> friend class StructPriceLevels;
     template<typename> friend class MapPriceLevels;
@@ -1222,7 +1227,7 @@ private:
             auto order = ordersOnSide->front();
             if (order && order->isMarket()) {
                 order->cancel();
-                ordersOnSide->removeOrder(order);
+                ordersOnSide->removeOrder(*order);
                 m_listener.onOrder(*order);
             }
         }
@@ -1443,7 +1448,7 @@ public:
         return placeSellOrder(sessionId, instrument, Price(kMarketSellPrice), quantity, orderId);
     }
     void quote(SessionIdView sessionId, InstrumentSymbolView instrument, Price bidPrice, Quantity bidQuantity, Price askPrice, Quantity askQuantity, QuoteIdView quoteId) {
-        auto book = m_books.getOrCreate(instrument, m_listener);
+        auto book = m_books.getOrCreate(instrument, *this);
         auto orders = book->getQuotes(sessionId, quoteId, [&]() { return QuoteOrders{}; });
         book->quote(orders, bidPrice, bidQuantity, askPrice, askQuantity);
     }
@@ -1488,7 +1493,7 @@ private:
             return std::unexpected(ErrorContext(InsertError::NullOrder, EngineConstants::kOrderCannotBeNull));
         }
         m_allOrders.add(order);
-        auto book = m_books.getOrCreate(instrument, m_listener);
+        auto book = m_books.getOrCreate(instrument, *this);
         return book->insertOrder(order);
     }
     TListener& m_listener;
@@ -1496,7 +1501,84 @@ private:
     static inline NoOpListener s_defaultNoOpListener;
 };
 
-} // namespace orderbook
+// ============================================================================
+// Test Utilities
+// ============================================================================
 
-// using declarations for convenience (global scope, not exported from module)
-// These are for non-module consumers; module consumers use orderbook:: prefix
+template <typename TListener>
+class TestExchange : public Exchange<TListener> {
+public:
+    TestExchange() = default;
+    explicit TestExchange(TListener& listener) : Exchange<TListener>(listener) {}
+
+    OrderInsertResult placeBuyOrder(SessionIdView sessionId, Price price, Quantity quantity, OrderIdStrView orderId = "") {
+        return Exchange<TListener>::placeBuyOrder(sessionId, kDefaultInstrument, price, quantity, orderId);
+    }
+    OrderInsertResult placeSellOrder(SessionIdView sessionId, Price price, Quantity quantity, OrderIdStrView orderId = "") {
+        return Exchange<TListener>::placeSellOrder(sessionId, kDefaultInstrument, price, quantity, orderId);
+    }
+    OrderInsertResult placeMarketBuyOrder(SessionIdView sessionId, Quantity quantity, OrderIdStrView orderId = "") {
+        return placeBuyOrder(sessionId, Price(kMarketBuyPrice), quantity, orderId);
+    }
+    OrderInsertResult placeMarketSellOrder(SessionIdView sessionId, Quantity quantity, OrderIdStrView orderId = "") {
+        return Exchange<TListener>::placeMarketSellOrder(sessionId, kDefaultInstrument, quantity, orderId);
+    }
+    OrderInsertResult placeBuyOrder(SessionIdView sessionId, InstrumentSymbolView instrument, Price price, Quantity quantity, OrderIdStrView orderId = "") {
+        return Exchange<TListener>::placeBuyOrder(sessionId, instrument, price, quantity, orderId);
+    }
+    OrderInsertResult placeSellOrder(SessionIdView sessionId, InstrumentSymbolView instrument, Price price, Quantity quantity, OrderIdStrView orderId = "") {
+        return Exchange<TListener>::placeSellOrder(sessionId, instrument, price, quantity, orderId);
+    }
+    OrderInsertResult placeMarketBuyOrder(SessionIdView sessionId, InstrumentSymbolView instrument, Quantity quantity, OrderIdStrView orderId = "") {
+        return placeBuyOrder(sessionId, instrument, Price(kMarketBuyPrice), quantity, orderId);
+    }
+    OrderInsertResult placeMarketSellOrder(SessionIdView sessionId, InstrumentSymbolView instrument, Quantity quantity, OrderIdStrView orderId = "") {
+        return Exchange<TListener>::placeMarketSellOrder(sessionId, instrument, quantity, orderId);
+    }
+    ObjectCount bidCount() const { return Exchange<TListener>::getBook(kDefaultInstrument).value().m_bids.size(); }
+    ObjectCount askCount() const { return Exchange<TListener>::getBook(kDefaultInstrument).value().m_asks.size(); }
+    int64_t bidIndex(ExchangeId id) const {
+        auto ids = Exchange<TListener>::getBook(kDefaultInstrument).value().m_bidOrderIds;
+        auto it = std::find(ids.begin(), ids.end(), id);
+        return it == ids.end() ? -1 : static_cast<int>(std::distance(ids.begin(), it));
+    }
+    int64_t askIndex(ExchangeId id) const {
+        auto ids = Exchange<TListener>::getBook(kDefaultInstrument).value().m_askOrderIds;
+        auto it = std::find(ids.begin(), ids.end(), id);
+        return it == ids.end() ? -1 : static_cast<int>(std::distance(ids.begin(), it));
+    }
+};
+
+class TestOrder : public Order {
+public:
+    TestOrder(ExchangeId id, Price price, Quantity quantity, Order::Side side)
+        : Order(EngineConstants::kTestSessionId, "", kDefaultInstrument, price, quantity, side, id) {
+        m_orderIdNum = id;
+    }
+    TestOrder(SessionIdView sessionId, OrderIdStrView orderId, Price price, Quantity quantity, Order::Side side, ExchangeId exchangeId)
+        : Order(sessionId, orderId, kDefaultInstrument, price, quantity, side, exchangeId) {}
+    static std::shared_ptr<TestOrder> createOrder(ExchangeId id, Price price, Quantity quantity, Order::Side side) {
+        using Allocator = MemoryPoolAllocator<TestOrder, OrderPool>;
+        return std::allocate_shared<TestOrder>(Allocator{}, id, price, quantity, side);
+    }
+    static std::shared_ptr<TestOrder> create(SessionIdView sessionId, OrderIdStrView orderId, Price price, Quantity quantity, Order::Side side, ExchangeId exchange_id) {
+        using Allocator = MemoryPoolAllocator<TestOrder, OrderPool>;
+        return std::allocate_shared<TestOrder>(Allocator{}, sessionId, orderId, price, quantity, side, exchange_id);
+    }
+    static std::shared_ptr<TestOrder> create(SessionIdView sessionId, Price price, Quantity quantity, Order::Side side, ExchangeId exchange_id) {
+        using Allocator = MemoryPoolAllocator<TestOrder, OrderPool>;
+        return std::allocate_shared<TestOrder>(Allocator{}, sessionId, "", price, quantity, side, exchange_id);
+    }
+    static std::shared_ptr<TestOrder> create(ExchangeId exchange_id, Price price, Quantity quantity, Order::Side side) {
+        using Allocator = MemoryPoolAllocator<TestOrder, OrderPool>;
+        return std::allocate_shared<TestOrder>(Allocator{}, EngineConstants::kTestSessionId, "", price, quantity, side, exchange_id);
+    }
+    static std::shared_ptr<TestOrder> create(Price price, int quantity, Order::Side side) {
+        using Allocator = MemoryPoolAllocator<TestOrder, OrderPool>;
+        return std::allocate_shared<TestOrder>(Allocator{}, EngineConstants::kTestSessionId, "", price, Quantity(quantity), side, ExchangeId(1));
+    }
+};
+
+inline const std::string kDummyInstrument = std::string(kDefaultInstrument);
+
+} // namespace orderbook

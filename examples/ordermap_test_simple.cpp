@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cassert>
 
+#include <boost/intrusive/list.hpp>
 import orderbook;
 
 using namespace orderbook;

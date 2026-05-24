@@ -1,0 +1,4 @@
+DEBUG: main() entered
+DEBUG: after sizeof
+DEBUG: calling insertOrders(false,1000)...
+DEBUG: insertOrders(false,1000) done

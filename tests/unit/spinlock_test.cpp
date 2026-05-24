@@ -1,9 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <thread>
-#include <mutex> // For std::lock_guard
+#include <mutex>
 #include <vector>
-#include "core/spinlock.h"
+
+#include <boost/intrusive/list.hpp>
+import orderbook;
 
 using namespace orderbook;
 

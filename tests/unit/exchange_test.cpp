@@ -1,14 +1,12 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <stdexcept>
-#include <string> // For std::string
+#include <string>
 #include <vector>
 #include <optional>
 
-#include "safety/production_safety.h" // Explicitly include ProductionSafety
-#include "core/exchange.h"
-#include "core/order.h"
-#include "core/test.h"
+#include <boost/intrusive/list.hpp>
+import orderbook;
 
 using namespace orderbook;
 
@@ -25,7 +23,7 @@ struct TestListener : ExchangeListener {
 
 TEST_CASE("Exchange insert order buy", "[exchange]") {
     // Disable production safety in tests to prevent recursion with Boost Test Framework
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     TestExchange<ExchangeListener> exchange;
 

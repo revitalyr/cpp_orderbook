@@ -1,16 +1,15 @@
 #include <catch2/catch_test_macros.hpp>
-#include <atomic>   // For std::atomic
-#include <chrono>   // For std::chrono
-#include <mutex>    // For std::mutex, std::lock_guard
-#include <random>   // For std::random_device, std::mt19937, std::uniform_real_distribution, std::uniform_int_distribution
-#include <string>   // For std::string, std::to_string
-#include <thread>   // For std::thread
-#include <vector>   // For std::vector
+#include <atomic>
+#include <chrono>
+#include <mutex>
+#include <random>
+#include <string>
+#include <thread>
+#include <vector>
 
-#include "core/exchange.h"
-#include "core/orderbook.h"
-#include "core/order.h"
-#include "core/test.h"
+#include <boost/intrusive/list.hpp>
+
+import orderbook;
 
 using namespace orderbook;
 
@@ -43,7 +42,7 @@ struct IntegrationTestListener : ExchangeListener {
 };
 
 TEST_CASE("IntegrationTest FullOrderLifecycle", "[integration]") {
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener;
     TestExchange<IntegrationTestListener> exchange(listener);
@@ -72,7 +71,7 @@ TEST_CASE("IntegrationTest FullOrderLifecycle", "[integration]") {
 }
 
 TEST_CASE("IntegrationTest MultiInstrumentTrading", "[integration]") {
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener;
     TestExchange<IntegrationTestListener> exchange(listener);
@@ -96,7 +95,7 @@ TEST_CASE("IntegrationTest MultiInstrumentTrading", "[integration]") {
 }
 
 TEST_CASE("IntegrationTest HighFrequencyTradingSimulation", "[integration]") {
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener;
     TestExchange<IntegrationTestListener> exchange(listener);
@@ -127,7 +126,7 @@ TEST_CASE("IntegrationTest HighFrequencyTradingSimulation", "[integration]") {
 }
 
 TEST_CASE("IntegrationTest MarketOrderIntegration", "[integration]") {
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener;
     TestExchange<IntegrationTestListener> exchange(listener);
@@ -150,7 +149,7 @@ TEST_CASE("IntegrationTest MarketOrderIntegration", "[integration]") {
 }
 
 TEST_CASE("IntegrationTest PartialFillAcrossMultipleOrders", "[integration]") {
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener;
     TestExchange<IntegrationTestListener> exchange(listener);
@@ -178,7 +177,7 @@ TEST_CASE("IntegrationTest PartialFillAcrossMultipleOrders", "[integration]") {
 }
 
 TEST_CASE("IntegrationTest OrderCancellationIntegration", "[integration]") {
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener;
     TestExchange<IntegrationTestListener> exchange(listener);
@@ -203,7 +202,7 @@ TEST_CASE("IntegrationTest OrderCancellationIntegration", "[integration]") {
 }
 
 TEST_CASE("IntegrationTest ConcurrentOperations", "[integration]") {
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener;
     TestExchange<IntegrationTestListener> exchange(listener);
@@ -234,7 +233,7 @@ TEST_CASE("IntegrationTest ConcurrentOperations", "[integration]") {
 }
 
 TEST_CASE("IntegrationTest SmartPointerMemoryManagement", "[integration]") {
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener;
     TestExchange<IntegrationTestListener> exchange(listener);
@@ -262,7 +261,7 @@ TEST_CASE("IntegrationTest SmartPointerMemoryManagement", "[integration]") {
 }
 
 TEST_CASE("IntegrationTest OrderBookConsistency", "[integration]") {
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener;
     TestExchange<IntegrationTestListener> exchange(listener);
@@ -292,7 +291,7 @@ TEST_CASE("IntegrationTest OrderBookConsistency", "[integration]") {
 }
 
 TEST_CASE("IntegrationTest ErrorHandlingIntegration", "[integration]") {
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener;
     TestExchange<IntegrationTestListener> exchange(listener);
@@ -312,7 +311,7 @@ TEST_CASE("IntegrationTest ErrorHandlingIntegration", "[integration]") {
 }
 
 TEST_CASE("IntegrationTest PerformanceIntegration", "[integration]") {
-    ::ProductionSafety::enableSafety(false);
+    ProductionSafety::enableSafety(false);
     
     IntegrationTestListener listener;
     TestExchange<IntegrationTestListener> exchange(listener);

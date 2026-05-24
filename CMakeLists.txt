@@ -98,7 +98,6 @@ include(Catch)
 
 # Include directories with modern organization
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/cpp_fixed)
 
 # Modern library configuration
@@ -122,8 +121,6 @@ set_target_properties(orderbook PROPERTIES
 
 # Target-specific configuration
 target_include_directories(orderbook PUBLIC 
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/cpp_fixed>
 )
 target_link_libraries(orderbook PUBLIC Boost::intrusive)
@@ -152,6 +149,11 @@ foreach(TEST_SOURCE ${UNIT_TEST_SOURCES})
     target_link_libraries(${TEST_NAME} 
         PRIVATE orderbook
         PRIVATE Catch2::Catch2WithMain
+    )
+    
+    # Enable C++ module scanning for consumer targets
+    set_source_files_properties(${TEST_SOURCE} PROPERTIES
+        CXX_SCAN_FOR_MODULES ON
     )
     
     # For MSVC, ensure proper C++ standard
@@ -183,6 +185,11 @@ foreach(BENCH_SOURCE ${BENCHMARK_TEST_SOURCES})
     add_executable(${BENCH_NAME} ${BENCH_SOURCE})
     target_link_libraries(${BENCH_NAME} 
         PRIVATE orderbook 
+    )
+    
+    # Enable C++ module scanning for consumer targets
+    set_source_files_properties(${BENCH_SOURCE} PROPERTIES
+        CXX_SCAN_FOR_MODULES ON
     )
     
     # For MSVC, ensure proper C++ standard
@@ -221,6 +228,11 @@ foreach(INT_SOURCE ${INTEGRATION_TEST_SOURCES})
         PRIVATE Catch2::Catch2WithMain
     )
     
+    # Enable C++ module scanning for consumer targets
+    set_source_files_properties(${INT_SOURCE} PROPERTIES
+        CXX_SCAN_FOR_MODULES ON
+    )
+    
     # For MSVC, ensure proper C++ standard
     if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
         target_compile_options(${INT_NAME} PRIVATE /std:c++latest)
@@ -252,6 +264,11 @@ foreach(EXAMPLE_SOURCE ${EXAMPLE_SOURCES})
         PRIVATE orderbook
     )
     
+    # Enable C++ module scanning for consumer targets
+    set_source_files_properties(${EXAMPLE_SOURCE} PROPERTIES
+        CXX_SCAN_FOR_MODULES ON
+    )
+    
     # For MSVC, ensure proper C++ standard
     if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
         target_compile_options(${EXAMPLE_NAME} PRIVATE /std:c++latest)
@@ -280,11 +297,7 @@ install(TARGETS orderbook
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
-
-# Install headers with proper organization
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # Install examples
 install(DIRECTORY examples/ DESTINATION ${CMAKE_INSTALL_DATADIR}/cpp_orderbook/examples)
@@ -364,7 +377,7 @@ endif()
 # Documentation generation with Doxygen
 find_package(Doxygen QUIET)
 if(DOXYGEN_FOUND)
-    set(DOXYGEN_INPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    set(DOXYGEN_INPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
     set(DOXYGEN_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/docs)
     
     add_custom_target(docs
